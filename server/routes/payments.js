@@ -2,6 +2,12 @@ import express from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { dbRunAsync, dbGetAsync, dbAllAsync } from '../database/init.js';
 import { authenticateToken } from '../middleware/auth.js';
+import { 
+  sendSubscriptionConfirmation, 
+  sendPaymentReceived, 
+  sendTrialActivated,
+  sendSubscriptionCancelled 
+} from '../services/emailService.js';
 
 const router = express.Router();
 
@@ -126,7 +132,7 @@ router.post('/subscribe', authenticateToken, async (req, res) => {
         transaction_amount: plan.price,
         currency_id: 'BRL'
       },
-      back_url: `${process.env.FRONTEND_URL || 'https://checklist-pro.rhumarh.com'}/pricing?status=success`,
+      back_url: `${process.env.FRONTEND_URL || 'https://checklist-pro.rhumarh.com'}/payment/success?plan=${plan_id}`,
       payer_email: user.email,
       external_reference: `${company.id}|${plan_id}|${uuidv4()}`
     };
@@ -221,6 +227,26 @@ router.post('/webhook', async (req, res) => {
             SET status = 'active', start_date = ?, end_date = ?, updated_at = ?
             WHERE company_id = ? AND status = 'pending'
           `, [new Date().toISOString(), expiresAt.toISOString(), new Date().toISOString(), companyId]);
+
+          // Enviar email de pagamento recebido
+          try {
+            const company = await dbGetAsync('SELECT * FROM companies WHERE id = ?', [companyId]);
+            const owner = await dbGetAsync('SELECT * FROM users WHERE id = ?', [company?.owner_id]);
+            
+            if (owner && company) {
+              const plan = PLANS[planId];
+              await sendPaymentReceived(owner.email, {
+                userName: owner.name,
+                companyName: company.name,
+                planName: plan?.name || planId,
+                amount: paymentData.transaction_amount,
+                paymentMethod: paymentData.payment_method_id,
+                paymentDate: new Date().toISOString()
+              });
+            }
+          } catch (emailError) {
+            console.error('Erro ao enviar email de pagamento:', emailError);
+          }
         }
       }
     } else if (type === 'subscription_preapproval' || type === 'subscription_authorized_payment') {
@@ -249,6 +275,25 @@ router.post('/webhook', async (req, res) => {
             SET status = 'active', mp_subscription_id = ?, start_date = ?, end_date = ?, updated_at = ?
             WHERE company_id = ? AND mp_preapproval_id = ?
           `, [data.id, new Date().toISOString(), expiresAt.toISOString(), new Date().toISOString(), companyId, data.id]);
+
+          // Enviar email de confirmacao de assinatura
+          try {
+            const company = await dbGetAsync('SELECT * FROM companies WHERE id = ?', [companyId]);
+            const owner = await dbGetAsync('SELECT * FROM users WHERE id = ?', [company?.owner_id]);
+            
+            if (owner && company) {
+              const plan = PLANS[planId];
+              await sendSubscriptionConfirmation(owner.email, {
+                userName: owner.name,
+                companyName: company.name,
+                planName: plan?.name || planId,
+                price: plan?.price || 0,
+                expiresAt: expiresAt.toISOString()
+              });
+            }
+          } catch (emailError) {
+            console.error('Erro ao enviar email de confirmacao:', emailError);
+          }
         }
       }
     }
@@ -271,6 +316,8 @@ router.post('/cancel', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'Empresa nao encontrada' });
     }
 
+    const user = await dbGetAsync('SELECT * FROM users WHERE id = ?', [req.user.id]);
+
     if (company.mp_subscription_id) {
       const accessToken = process.env.MP_ACCESS_TOKEN;
       try {
@@ -292,6 +339,19 @@ router.post('/cancel', authenticateToken, async (req, res) => {
       SET status = 'cancelled', updated_at = ?
       WHERE company_id = ? AND status = 'active'
     `, [new Date().toISOString(), company.id]);
+
+    // Enviar email de cancelamento
+    try {
+      if (user) {
+        await sendSubscriptionCancelled(user.email, {
+          userName: user.name,
+          companyName: company.name,
+          expiresAt: company.plan_expires_at
+        });
+      }
+    } catch (emailError) {
+      console.error('Erro ao enviar email de cancelamento:', emailError);
+    }
 
     res.json({ message: 'Assinatura cancelada. Voce tera acesso ate o fim do periodo pago.' });
   } catch (error) {
@@ -335,6 +395,8 @@ router.post('/activate-trial', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'Empresa nao encontrada' });
     }
 
+    const user = await dbGetAsync('SELECT * FROM users WHERE id = ?', [req.user.id]);
+
     // Verificar se ja usou trial
     const hadTrial = await dbGetAsync(`
       SELECT * FROM subscriptions WHERE company_id = ? AND plan = 'trial'
@@ -358,6 +420,19 @@ router.post('/activate-trial', authenticateToken, async (req, res) => {
       VALUES (?, ?, 'trial', 'active', ?, ?)
     `, [uuidv4(), company.id, new Date().toISOString(), expiresAt.toISOString()]);
 
+    // Enviar email de trial ativado
+    try {
+      if (user) {
+        await sendTrialActivated(user.email, {
+          userName: user.name,
+          companyName: company.name,
+          expiresAt: expiresAt.toISOString()
+        });
+      }
+    } catch (emailError) {
+      console.error('Erro ao enviar email de trial:', emailError);
+    }
+
     res.json({ 
       message: 'Trial ativado!',
       expires_at: expiresAt.toISOString()
@@ -365,6 +440,90 @@ router.post('/activate-trial', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Erro ao ativar trial:', error);
     res.status(500).json({ error: 'Erro ao ativar trial' });
+  }
+});
+
+// Estatisticas de assinaturas (admin)
+router.get('/admin/stats', authenticateToken, async (req, res) => {
+  try {
+    // Verificar se e admin (owner de alguma empresa)
+    const company = await dbGetAsync('SELECT * FROM companies WHERE owner_id = ?', [req.user.id]);
+    if (!company) {
+      return res.status(403).json({ error: 'Acesso negado' });
+    }
+
+    const stats = {
+      total_subscriptions: 0,
+      active_subscriptions: 0,
+      trial_subscriptions: 0,
+      cancelled_subscriptions: 0,
+      total_revenue: 0,
+      monthly_revenue: 0
+    };
+
+    // Total de assinaturas
+    const totalSubs = await dbGetAsync('SELECT COUNT(*) as count FROM subscriptions');
+    stats.total_subscriptions = totalSubs?.count || 0;
+
+    // Assinaturas ativas
+    const activeSubs = await dbGetAsync("SELECT COUNT(*) as count FROM subscriptions WHERE status = 'active'");
+    stats.active_subscriptions = activeSubs?.count || 0;
+
+    // Trials
+    const trialSubs = await dbGetAsync("SELECT COUNT(*) as count FROM subscriptions WHERE plan = 'trial'");
+    stats.trial_subscriptions = trialSubs?.count || 0;
+
+    // Canceladas
+    const cancelledSubs = await dbGetAsync("SELECT COUNT(*) as count FROM subscriptions WHERE status = 'cancelled'");
+    stats.cancelled_subscriptions = cancelledSubs?.count || 0;
+
+    // Receita total
+    const totalRevenue = await dbGetAsync("SELECT SUM(amount) as total FROM payments WHERE status = 'approved'");
+    stats.total_revenue = totalRevenue?.total || 0;
+
+    // Receita do mes
+    const startOfMonth = new Date();
+    startOfMonth.setDate(1);
+    startOfMonth.setHours(0, 0, 0, 0);
+    
+    const monthlyRevenue = await dbGetAsync(
+      "SELECT SUM(amount) as total FROM payments WHERE status = 'approved' AND paid_at >= ?",
+      [startOfMonth.toISOString()]
+    );
+    stats.monthly_revenue = monthlyRevenue?.total || 0;
+
+    res.json(stats);
+  } catch (error) {
+    console.error('Erro ao obter estatisticas:', error);
+    res.status(500).json({ error: 'Erro ao obter estatisticas' });
+  }
+});
+
+// Listar todas as assinaturas (admin)
+router.get('/admin/subscriptions', authenticateToken, async (req, res) => {
+  try {
+    const company = await dbGetAsync('SELECT * FROM companies WHERE owner_id = ?', [req.user.id]);
+    if (!company) {
+      return res.status(403).json({ error: 'Acesso negado' });
+    }
+
+    const subscriptions = await dbAllAsync(`
+      SELECT 
+        s.*,
+        c.name as company_name,
+        u.name as owner_name,
+        u.email as owner_email
+      FROM subscriptions s
+      LEFT JOIN companies c ON s.company_id = c.id
+      LEFT JOIN users u ON c.owner_id = u.id
+      ORDER BY s.created_at DESC
+      LIMIT 100
+    `);
+
+    res.json(subscriptions);
+  } catch (error) {
+    console.error('Erro ao listar assinaturas:', error);
+    res.status(500).json({ error: 'Erro ao listar assinaturas' });
   }
 });
 

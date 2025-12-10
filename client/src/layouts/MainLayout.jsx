@@ -27,6 +27,7 @@ const menuItems = [
   { path: '/quick-actions', icon: Zap, label: 'Acoes Rapidas' },
   { path: '/reports', icon: FileText, label: 'Relatorios' },
   { path: '/pricing', icon: CreditCard, label: 'Planos' },
+  { path: '/subscriptions', icon: CreditCard, label: 'Assinaturas' },
 ]
 
 export default function MainLayout() {

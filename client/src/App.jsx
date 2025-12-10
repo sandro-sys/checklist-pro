@@ -19,6 +19,8 @@ import Team from './pages/Team'
 import QuickActions from './pages/QuickActions'
 import Reports from './pages/Reports'
 import Pricing from './pages/Pricing'
+import PaymentSuccess from './pages/PaymentSuccess'
+import Subscriptions from './pages/Subscriptions'
 import Privacy from './pages/Privacy'
 import Terms from './pages/Terms'
 
@@ -83,6 +85,9 @@ function App() {
       <Route path="/privacy" element={<Privacy />} />
       <Route path="/terms" element={<Terms />} />
       
+      {/* Payment Success */}
+      <Route path="/payment/success" element={<PaymentSuccess />} />
+      
       {/* Public Checklist Execution */}
       <Route path="/execute/:checklistId" element={<ChecklistExecute />} />
       
@@ -102,6 +107,7 @@ function App() {
         <Route path="/quick-actions" element={<QuickActions />} />
         <Route path="/reports" element={<Reports />} />
         <Route path="/pricing" element={<Pricing />} />
+        <Route path="/subscriptions" element={<Subscriptions />} />
       </Route>
       
       {/* 404 */}
