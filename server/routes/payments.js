@@ -1,7 +1,7 @@
 import express from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { MercadoPagoConfig, PreApproval, Payment } from 'mercadopago';
-import { dbRun, dbGet, dbAll } from '../database/init.js';
+import { dbRunAsync, dbGetAsync, dbAllAsync } from '../database/init.js';
 import { authenticateToken } from '../middleware/auth.js';
 
 const router = express.Router();
@@ -55,9 +55,9 @@ router.get('/plans', (req, res) => {
 });
 
 // Obter status da assinatura da empresa
-router.get('/subscription', authenticateToken, (req, res) => {
+router.get('/subscription', authenticateToken, async (req, res) => {
   try {
-    const company = dbGet(`
+    const company = await dbGetAsync(`
       SELECT id, name, plan, plan_expires_at, mp_subscription_id 
       FROM companies 
       WHERE owner_id = ? OR id = ?
@@ -67,7 +67,7 @@ router.get('/subscription', authenticateToken, (req, res) => {
       return res.status(404).json({ error: 'Empresa nao encontrada' });
     }
 
-    const subscription = dbGet(`
+    const subscription = await dbGetAsync(`
       SELECT * FROM subscriptions 
       WHERE company_id = ? 
       ORDER BY created_at DESC 
@@ -106,7 +106,7 @@ router.post('/subscribe', authenticateToken, async (req, res) => {
     }
 
     const plan = PLANS[plan_id];
-    const company = dbGet(`
+    const company = await dbGetAsync(`
       SELECT * FROM companies WHERE owner_id = ?
     `, [req.user.id]);
 
@@ -114,7 +114,7 @@ router.post('/subscribe', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'Empresa nao encontrada' });
     }
 
-    const user = dbGet('SELECT * FROM users WHERE id = ?', [req.user.id]);
+    const user = await dbGetAsync('SELECT * FROM users WHERE id = ?', [req.user.id]);
 
     // Criar pre-approval (assinatura) no Mercado Pago
     const subscriptionData = {
@@ -125,7 +125,7 @@ router.post('/subscribe', authenticateToken, async (req, res) => {
         transaction_amount: plan.price,
         currency_id: 'BRL'
       },
-      back_url: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/pricing?status=success`,
+      back_url: `${process.env.FRONTEND_URL || 'https://checklist-pro.onrender.com'}/pricing?status=success`,
       payer_email: user.email,
       external_reference: `${company.id}|${plan_id}|${uuidv4()}`
     };
@@ -134,7 +134,7 @@ router.post('/subscribe', authenticateToken, async (req, res) => {
 
     // Salvar assinatura pendente no banco
     const subscriptionId = uuidv4();
-    dbRun(`
+    await dbRunAsync(`
       INSERT INTO subscriptions (id, company_id, plan, status, mp_preapproval_id, price)
       VALUES (?, ?, ?, 'pending', ?, ?)
     `, [subscriptionId, company.id, plan_id, response.id, plan.price]);
@@ -171,14 +171,14 @@ router.post('/webhook', async (req, res) => {
         const expiresAt = new Date();
         expiresAt.setMonth(expiresAt.getMonth() + 1);
 
-        dbRun(`
+        await dbRunAsync(`
           UPDATE companies 
           SET plan = ?, plan_expires_at = ?, updated_at = ?
           WHERE id = ?
         `, [planId, expiresAt.toISOString(), new Date().toISOString(), companyId]);
 
         // Registrar pagamento
-        dbRun(`
+        await dbRunAsync(`
           INSERT INTO payments (id, company_id, mp_payment_id, amount, status, payment_method, paid_at)
           VALUES (?, ?, ?, ?, ?, ?, ?)
         `, [
@@ -192,7 +192,7 @@ router.post('/webhook', async (req, res) => {
         ]);
 
         // Atualizar status da assinatura
-        dbRun(`
+        await dbRunAsync(`
           UPDATE subscriptions 
           SET status = 'active', start_date = ?, end_date = ?, updated_at = ?
           WHERE company_id = ? AND status = 'pending'
@@ -210,13 +210,13 @@ router.post('/webhook', async (req, res) => {
         const expiresAt = new Date();
         expiresAt.setMonth(expiresAt.getMonth() + 1);
 
-        dbRun(`
+        await dbRunAsync(`
           UPDATE companies 
           SET plan = ?, plan_expires_at = ?, mp_subscription_id = ?, updated_at = ?
           WHERE id = ?
         `, [planId, expiresAt.toISOString(), data.id, new Date().toISOString(), companyId]);
 
-        dbRun(`
+        await dbRunAsync(`
           UPDATE subscriptions 
           SET status = 'active', mp_subscription_id = ?, start_date = ?, end_date = ?, updated_at = ?
           WHERE company_id = ? AND mp_preapproval_id = ?
@@ -234,7 +234,7 @@ router.post('/webhook', async (req, res) => {
 // Cancelar assinatura
 router.post('/cancel', authenticateToken, async (req, res) => {
   try {
-    const company = dbGet(`
+    const company = await dbGetAsync(`
       SELECT * FROM companies WHERE owner_id = ?
     `, [req.user.id]);
 
@@ -254,7 +254,7 @@ router.post('/cancel', authenticateToken, async (req, res) => {
     }
 
     // Manter o plano ate a data de expiracao
-    dbRun(`
+    await dbRunAsync(`
       UPDATE subscriptions 
       SET status = 'cancelled', updated_at = ?
       WHERE company_id = ? AND status = 'active'
@@ -268,9 +268,9 @@ router.post('/cancel', authenticateToken, async (req, res) => {
 });
 
 // Historico de pagamentos
-router.get('/payments', authenticateToken, (req, res) => {
+router.get('/payments', authenticateToken, async (req, res) => {
   try {
-    const company = dbGet(`
+    const company = await dbGetAsync(`
       SELECT id FROM companies WHERE owner_id = ? OR id = ?
     `, [req.user.id, req.user.company_id]);
 
@@ -278,7 +278,7 @@ router.get('/payments', authenticateToken, (req, res) => {
       return res.status(404).json({ error: 'Empresa nao encontrada' });
     }
 
-    const payments = dbAll(`
+    const payments = await dbAllAsync(`
       SELECT * FROM payments 
       WHERE company_id = ? 
       ORDER BY created_at DESC
@@ -292,9 +292,9 @@ router.get('/payments', authenticateToken, (req, res) => {
 });
 
 // Ativar trial
-router.post('/activate-trial', authenticateToken, (req, res) => {
+router.post('/activate-trial', authenticateToken, async (req, res) => {
   try {
-    const company = dbGet(`
+    const company = await dbGetAsync(`
       SELECT * FROM companies WHERE owner_id = ?
     `, [req.user.id]);
 
@@ -303,7 +303,7 @@ router.post('/activate-trial', authenticateToken, (req, res) => {
     }
 
     // Verificar se ja usou trial
-    const hadTrial = dbGet(`
+    const hadTrial = await dbGetAsync(`
       SELECT * FROM subscriptions WHERE company_id = ? AND plan = 'trial'
     `, [company.id]);
 
@@ -314,13 +314,13 @@ router.post('/activate-trial', authenticateToken, (req, res) => {
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 14); // 14 dias
 
-    dbRun(`
+    await dbRunAsync(`
       UPDATE companies 
       SET plan = 'trial', plan_expires_at = ?, updated_at = ?
       WHERE id = ?
     `, [expiresAt.toISOString(), new Date().toISOString(), company.id]);
 
-    dbRun(`
+    await dbRunAsync(`
       INSERT INTO subscriptions (id, company_id, plan, status, start_date, end_date)
       VALUES (?, ?, 'trial', 'active', ?, ?)
     `, [uuidv4(), company.id, new Date().toISOString(), expiresAt.toISOString()]);
@@ -336,4 +336,3 @@ router.post('/activate-trial', authenticateToken, (req, res) => {
 });
 
 export default router;
-

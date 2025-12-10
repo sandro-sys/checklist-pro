@@ -1,6 +1,6 @@
 import express from 'express';
 import { v4 as uuidv4 } from 'uuid';
-import { dbRun, dbGet, dbAll } from '../database/init.js';
+import { dbRunAsync, dbGetAsync, dbAllAsync } from '../database/init.js';
 import { authenticateToken } from '../middleware/auth.js';
 
 const router = express.Router();
@@ -16,7 +16,7 @@ export const DEFAULT_ROLES = [
 ];
 
 // Listar cargos da empresa
-router.get('/', authenticateToken, (req, res) => {
+router.get('/', authenticateToken, async (req, res) => {
   try {
     const companyId = req.user.company_id;
     
@@ -24,7 +24,7 @@ router.get('/', authenticateToken, (req, res) => {
       return res.status(400).json({ error: 'Usuário não vinculado a uma empresa' });
     }
 
-    const roles = dbAll(`
+    const roles = await dbAllAsync(`
       SELECT r.*, 
              (SELECT COUNT(*) FROM users WHERE role_id = r.id) as users_count
       FROM roles r
@@ -40,11 +40,11 @@ router.get('/', authenticateToken, (req, res) => {
 });
 
 // Obter cargo por ID
-router.get('/:id', authenticateToken, (req, res) => {
+router.get('/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
 
-    const role = dbGet(`
+    const role = await dbGetAsync(`
       SELECT r.*, 
              (SELECT COUNT(*) FROM users WHERE role_id = r.id) as users_count
       FROM roles r
@@ -68,7 +68,7 @@ router.get('/:id', authenticateToken, (req, res) => {
 });
 
 // Criar novo cargo
-router.post('/', authenticateToken, (req, res) => {
+router.post('/', authenticateToken, async (req, res) => {
   try {
     const { name, description, permissions } = req.body;
     const companyId = req.user.company_id;
@@ -82,20 +82,20 @@ router.post('/', authenticateToken, (req, res) => {
     }
 
     // Verificar se já existe cargo com esse nome na empresa
-    const existingRole = dbGet('SELECT id FROM roles WHERE name = ? AND company_id = ?', [name, companyId]);
+    const existingRole = await dbGetAsync('SELECT id FROM roles WHERE name = ? AND company_id = ?', [name, companyId]);
     if (existingRole) {
       return res.status(400).json({ error: 'Já existe um cargo com esse nome' });
     }
 
     const roleId = uuidv4();
 
-    dbRun(`
+    await dbRunAsync(`
       INSERT INTO roles (id, name, description, company_id, permissions)
       VALUES (?, ?, ?, ?, ?)
     `, [roleId, name, description || null, companyId, permissions ? JSON.stringify(permissions) : null]);
 
     // Log de auditoria
-    dbRun(`
+    await dbRunAsync(`
       INSERT INTO audit_logs (id, user_id, action, entity_type, entity_id, details)
       VALUES (?, ?, 'CREATE', 'role', ?, ?)
     `, [uuidv4(), req.user.id, roleId, JSON.stringify({ name })]);
@@ -111,12 +111,12 @@ router.post('/', authenticateToken, (req, res) => {
 });
 
 // Atualizar cargo
-router.put('/:id', authenticateToken, (req, res) => {
+router.put('/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
     const { name, description, permissions } = req.body;
 
-    const role = dbGet('SELECT * FROM roles WHERE id = ?', [id]);
+    const role = await dbGetAsync('SELECT * FROM roles WHERE id = ?', [id]);
     if (!role) {
       return res.status(404).json({ error: 'Cargo não encontrado' });
     }
@@ -128,14 +128,14 @@ router.put('/:id', authenticateToken, (req, res) => {
 
     // Verificar nome duplicado
     if (name && name !== role.name) {
-      const existingRole = dbGet('SELECT id FROM roles WHERE name = ? AND company_id = ? AND id != ?', 
+      const existingRole = await dbGetAsync('SELECT id FROM roles WHERE name = ? AND company_id = ? AND id != ?', 
         [name, role.company_id, id]);
       if (existingRole) {
         return res.status(400).json({ error: 'Já existe um cargo com esse nome' });
       }
     }
 
-    dbRun(`
+    await dbRunAsync(`
       UPDATE roles 
       SET name = ?, description = ?, permissions = ?
       WHERE id = ?
@@ -147,7 +147,7 @@ router.put('/:id', authenticateToken, (req, res) => {
     ]);
 
     // Log de auditoria
-    dbRun(`
+    await dbRunAsync(`
       INSERT INTO audit_logs (id, user_id, action, entity_type, entity_id, details)
       VALUES (?, ?, 'UPDATE', 'role', ?, ?)
     `, [uuidv4(), req.user.id, id, JSON.stringify({ updated_fields: Object.keys(req.body) })]);
@@ -160,11 +160,11 @@ router.put('/:id', authenticateToken, (req, res) => {
 });
 
 // Deletar cargo
-router.delete('/:id', authenticateToken, (req, res) => {
+router.delete('/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
 
-    const role = dbGet('SELECT * FROM roles WHERE id = ?', [id]);
+    const role = await dbGetAsync('SELECT * FROM roles WHERE id = ?', [id]);
     if (!role) {
       return res.status(404).json({ error: 'Cargo não encontrado' });
     }
@@ -175,17 +175,17 @@ router.delete('/:id', authenticateToken, (req, res) => {
     }
 
     // Verificar se há usuários com este cargo
-    const usersWithRole = dbGet('SELECT COUNT(*) as count FROM users WHERE role_id = ?', [id]);
+    const usersWithRole = await dbGetAsync('SELECT COUNT(*) as count FROM users WHERE role_id = ?', [id]);
     if (usersWithRole && usersWithRole.count > 0) {
       return res.status(400).json({ 
         error: `Não é possível excluir. Existem ${usersWithRole.count} usuário(s) com este cargo.` 
       });
     }
 
-    dbRun('DELETE FROM roles WHERE id = ?', [id]);
+    await dbRunAsync('DELETE FROM roles WHERE id = ?', [id]);
 
     // Log de auditoria
-    dbRun(`
+    await dbRunAsync(`
       INSERT INTO audit_logs (id, user_id, action, entity_type, entity_id, details)
       VALUES (?, ?, 'DELETE', 'role', ?, ?)
     `, [uuidv4(), req.user.id, id, JSON.stringify({ role_name: role.name })]);
@@ -198,9 +198,9 @@ router.delete('/:id', authenticateToken, (req, res) => {
 });
 
 // Criar cargos padrão para uma empresa
-export function createDefaultRoles(companyId) {
+export async function createDefaultRoles(companyId) {
   for (const role of DEFAULT_ROLES) {
-    dbRun(`
+    await dbRunAsync(`
       INSERT INTO roles (id, name, description, company_id, permissions)
       VALUES (?, ?, ?, ?, ?)
     `, [uuidv4(), role.name, role.description, companyId, role.permissions]);
@@ -208,4 +208,3 @@ export function createDefaultRoles(companyId) {
 }
 
 export default router;
-

@@ -1,6 +1,6 @@
 import express from 'express';
 import QRCode from 'qrcode';
-import { dbGet, dbRun } from '../database/init.js';
+import { dbGetAsync } from '../database/init.js';
 import { authenticateToken } from '../middleware/auth.js';
 
 const router = express.Router();
@@ -11,13 +11,13 @@ router.get('/generate/:checklistId', authenticateToken, async (req, res) => {
     const { checklistId } = req.params;
     const { format = 'dataurl', size = 300 } = req.query;
 
-    const checklist = dbGet('SELECT * FROM checklists WHERE id = ?', [checklistId]);
+    const checklist = await dbGetAsync('SELECT * FROM checklists WHERE id = ?', [checklistId]);
 
     if (!checklist) {
       return res.status(404).json({ error: 'Checklist não encontrado' });
     }
 
-    const qrCodeUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/execute/${checklistId}`;
+    const qrCodeUrl = `${process.env.FRONTEND_URL || 'https://checklist-pro.onrender.com'}/execute/${checklistId}`;
 
     const options = {
       width: parseInt(size),
@@ -54,13 +54,13 @@ router.get('/download/:checklistId', authenticateToken, async (req, res) => {
     const { checklistId } = req.params;
     const { size = 500 } = req.query;
 
-    const checklist = dbGet('SELECT title FROM checklists WHERE id = ?', [checklistId]);
+    const checklist = await dbGetAsync('SELECT title FROM checklists WHERE id = ?', [checklistId]);
 
     if (!checklist) {
       return res.status(404).json({ error: 'Checklist não encontrado' });
     }
 
-    const qrCodeUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/execute/${checklistId}`;
+    const qrCodeUrl = `${process.env.FRONTEND_URL || 'https://checklist-pro.onrender.com'}/execute/${checklistId}`;
 
     const buffer = await QRCode.toBuffer(qrCodeUrl, {
       width: parseInt(size),
@@ -94,10 +94,10 @@ router.post('/batch', authenticateToken, async (req, res) => {
     const results = [];
 
     for (const checklistId of checklist_ids) {
-      const checklist = dbGet('SELECT id, title FROM checklists WHERE id = ?', [checklistId]);
+      const checklist = await dbGetAsync('SELECT id, title FROM checklists WHERE id = ?', [checklistId]);
       
       if (checklist) {
-        const qrCodeUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/execute/${checklistId}`;
+        const qrCodeUrl = `${process.env.FRONTEND_URL || 'https://checklist-pro.onrender.com'}/execute/${checklistId}`;
         const qrCode = await QRCode.toDataURL(qrCodeUrl, {
           width: 300,
           margin: 2,

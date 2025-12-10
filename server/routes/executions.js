@@ -1,12 +1,12 @@
 import express from 'express';
 import { v4 as uuidv4 } from 'uuid';
-import { dbRun, dbGet, dbAll } from '../database/init.js';
+import { dbRunAsync, dbGetAsync, dbAllAsync } from '../database/init.js';
 import { authenticateToken } from '../middleware/auth.js';
 
 const router = express.Router();
 
 // Iniciar execução de checklist
-router.post('/start', authenticateToken, (req, res) => {
+router.post('/start', authenticateToken, async (req, res) => {
   try {
     const { checklist_id } = req.body;
 
@@ -15,13 +15,13 @@ router.post('/start', authenticateToken, (req, res) => {
     }
 
     // Verificar se checklist existe e está ativo
-    const checklist = dbGet('SELECT * FROM checklists WHERE id = ? AND is_active = 1', [checklist_id]);
+    const checklist = await dbGetAsync('SELECT * FROM checklists WHERE id = ? AND is_active = 1', [checklist_id]);
     if (!checklist) {
       return res.status(404).json({ error: 'Checklist não encontrado ou inativo' });
     }
 
     // Verificar se já existe execução em andamento
-    const existingExecution = dbGet(`
+    const existingExecution = await dbGetAsync(`
       SELECT * FROM checklist_executions 
       WHERE checklist_id = ? AND executed_by = ? AND status = 'in_progress'
     `, [checklist_id, req.user.id]);
@@ -35,13 +35,13 @@ router.post('/start', authenticateToken, (req, res) => {
 
     const executionId = uuidv4();
 
-    dbRun(`
+    await dbRunAsync(`
       INSERT INTO checklist_executions (id, checklist_id, executed_by, status)
       VALUES (?, ?, ?, 'in_progress')
     `, [executionId, checklist_id, req.user.id]);
 
     // Log de auditoria
-    dbRun(`
+    await dbRunAsync(`
       INSERT INTO audit_logs (id, user_id, action, entity_type, entity_id, details)
       VALUES (?, ?, 'START_EXECUTION', 'execution', ?, ?)
     `, [uuidv4(), req.user.id, executionId, JSON.stringify({ checklist_id })]);
@@ -62,7 +62,7 @@ router.post('/start', authenticateToken, (req, res) => {
 });
 
 // Salvar resposta de item
-router.post('/:executionId/responses', authenticateToken, (req, res) => {
+router.post('/:executionId/responses', authenticateToken, async (req, res) => {
   try {
     const { executionId } = req.params;
     const { item_id, response, is_checked, is_not_applicable, notes } = req.body;
@@ -72,26 +72,26 @@ router.post('/:executionId/responses', authenticateToken, (req, res) => {
     }
 
     // Verificar se execução existe
-    const execution = dbGet('SELECT * FROM checklist_executions WHERE id = ?', [executionId]);
+    const execution = await dbGetAsync('SELECT * FROM checklist_executions WHERE id = ?', [executionId]);
     if (!execution) {
       return res.status(404).json({ error: 'Execução não encontrada' });
     }
 
     // Verificar se já existe resposta para este item
-    const existingResponse = dbGet(`
+    const existingResponse = await dbGetAsync(`
       SELECT * FROM execution_responses WHERE execution_id = ? AND item_id = ?
     `, [executionId, item_id]);
 
     if (existingResponse) {
       // Atualizar resposta existente
-      dbRun(`
+      await dbRunAsync(`
         UPDATE execution_responses 
         SET response = ?, is_checked = ?, is_not_applicable = ?, notes = ?, responded_at = ?
         WHERE id = ?
       `, [response || null, is_checked ? 1 : 0, is_not_applicable ? 1 : 0, notes || null, new Date().toISOString(), existingResponse.id]);
     } else {
       // Criar nova resposta
-      dbRun(`
+      await dbRunAsync(`
         INSERT INTO execution_responses (id, execution_id, item_id, response, is_checked, is_not_applicable, notes)
         VALUES (?, ?, ?, ?, ?, ?, ?)
       `, [uuidv4(), executionId, item_id, response || null, is_checked ? 1 : 0, is_not_applicable ? 1 : 0, notes || null]);
@@ -105,25 +105,25 @@ router.post('/:executionId/responses', authenticateToken, (req, res) => {
 });
 
 // Finalizar execução
-router.post('/:executionId/complete', authenticateToken, (req, res) => {
+router.post('/:executionId/complete', authenticateToken, async (req, res) => {
   try {
     const { executionId } = req.params;
     const { notes } = req.body;
 
-    const execution = dbGet('SELECT * FROM checklist_executions WHERE id = ?', [executionId]);
+    const execution = await dbGetAsync('SELECT * FROM checklist_executions WHERE id = ?', [executionId]);
     if (!execution) {
       return res.status(404).json({ error: 'Execução não encontrada' });
     }
 
     // Verificar se todos os itens obrigatórios foram respondidos
-    const requiredItems = dbAll(`
+    const requiredItems = await dbAllAsync(`
       SELECT ci.id 
       FROM checklist_items ci
       WHERE ci.checklist_id = ? AND ci.is_required = 1
     `, [execution.checklist_id]);
 
     // Buscar respostas marcadas como checked OU como não aplicável
-    const responses = dbAll(`
+    const responses = await dbAllAsync(`
       SELECT item_id FROM execution_responses 
       WHERE execution_id = ? AND (is_checked = 1 OR is_not_applicable = 1)
     `, [executionId]);
@@ -139,14 +139,14 @@ router.post('/:executionId/complete', authenticateToken, (req, res) => {
     }
 
     // Finalizar execução
-    dbRun(`
+    await dbRunAsync(`
       UPDATE checklist_executions 
       SET status = 'completed', completed_at = ?, notes = ?
       WHERE id = ?
     `, [new Date().toISOString(), notes || null, executionId]);
 
     // Log de auditoria
-    dbRun(`
+    await dbRunAsync(`
       INSERT INTO audit_logs (id, user_id, action, entity_type, entity_id, details)
       VALUES (?, ?, 'COMPLETE_EXECUTION', 'execution', ?, ?)
     `, [uuidv4(), req.user.id, executionId, JSON.stringify({ checklist_id: execution.checklist_id })]);
@@ -159,11 +159,11 @@ router.post('/:executionId/complete', authenticateToken, (req, res) => {
 });
 
 // Obter execução por ID
-router.get('/:executionId', authenticateToken, (req, res) => {
+router.get('/:executionId', authenticateToken, async (req, res) => {
   try {
     const { executionId } = req.params;
 
-    const execution = dbGet(`
+    const execution = await dbGetAsync(`
       SELECT e.*, 
              c.title as checklist_title,
              u.name as executed_by_name
@@ -177,7 +177,7 @@ router.get('/:executionId', authenticateToken, (req, res) => {
       return res.status(404).json({ error: 'Execução não encontrada' });
     }
 
-    const responses = dbAll(`
+    const responses = await dbAllAsync(`
       SELECT er.*, ci.title as item_title
       FROM execution_responses er
       LEFT JOIN checklist_items ci ON er.item_id = ci.id
@@ -192,7 +192,7 @@ router.get('/:executionId', authenticateToken, (req, res) => {
 });
 
 // Listar execuções de um checklist
-router.get('/checklist/:checklistId', authenticateToken, (req, res) => {
+router.get('/checklist/:checklistId', authenticateToken, async (req, res) => {
   try {
     const { checklistId } = req.params;
     const { status, start_date, end_date, limit = 50 } = req.query;
@@ -226,7 +226,7 @@ router.get('/checklist/:checklistId', authenticateToken, (req, res) => {
     query += ' ORDER BY e.executed_at DESC LIMIT ?';
     params.push(parseInt(limit));
 
-    const executions = dbAll(query, params);
+    const executions = await dbAllAsync(query, params);
     res.json(executions);
   } catch (error) {
     console.error('Erro ao listar execuções:', error);
@@ -235,7 +235,7 @@ router.get('/checklist/:checklistId', authenticateToken, (req, res) => {
 });
 
 // Dashboard - Estatísticas de execução
-router.get('/stats/:companyId', authenticateToken, (req, res) => {
+router.get('/stats/:companyId', authenticateToken, async (req, res) => {
   try {
     const { companyId } = req.params;
     const { period = '7' } = req.query; // dias
@@ -244,7 +244,7 @@ router.get('/stats/:companyId', authenticateToken, (req, res) => {
     const todayStart = new Date().toISOString().split('T')[0];
 
     // Total de execuções no período
-    const totalExecutions = dbGet(`
+    const totalExecutions = await dbGetAsync(`
       SELECT COUNT(*) as count
       FROM checklist_executions e
       JOIN checklists c ON e.checklist_id = c.id
@@ -252,7 +252,7 @@ router.get('/stats/:companyId', authenticateToken, (req, res) => {
     `, [companyId, startDate]);
 
     // Execuções completadas no período
-    const completedExecutions = dbGet(`
+    const completedExecutions = await dbGetAsync(`
       SELECT COUNT(*) as count
       FROM checklist_executions e
       JOIN checklists c ON e.checklist_id = c.id
@@ -260,7 +260,7 @@ router.get('/stats/:companyId', authenticateToken, (req, res) => {
     `, [companyId, startDate]);
 
     // Execuções hoje
-    const todayExecutions = dbGet(`
+    const todayExecutions = await dbGetAsync(`
       SELECT COUNT(*) as count
       FROM checklist_executions e
       JOIN checklists c ON e.checklist_id = c.id
@@ -268,7 +268,7 @@ router.get('/stats/:companyId', authenticateToken, (req, res) => {
     `, [companyId, todayStart]);
 
     // Execuções em andamento
-    const inProgressExecutions = dbGet(`
+    const inProgressExecutions = await dbGetAsync(`
       SELECT COUNT(*) as count
       FROM checklist_executions e
       JOIN checklists c ON e.checklist_id = c.id
@@ -276,7 +276,7 @@ router.get('/stats/:companyId', authenticateToken, (req, res) => {
     `, [companyId]);
 
     // Total de itens respondidos no período
-    const totalItemsResponded = dbGet(`
+    const totalItemsResponded = await dbGetAsync(`
       SELECT COUNT(*) as count
       FROM execution_responses er
       JOIN checklist_executions e ON er.execution_id = e.id
@@ -285,7 +285,7 @@ router.get('/stats/:companyId', authenticateToken, (req, res) => {
     `, [companyId, startDate]);
 
     // Itens marcados como N/A
-    const notApplicableItems = dbGet(`
+    const notApplicableItems = await dbGetAsync(`
       SELECT COUNT(*) as count
       FROM execution_responses er
       JOIN checklist_executions e ON er.execution_id = e.id
@@ -294,7 +294,7 @@ router.get('/stats/:companyId', authenticateToken, (req, res) => {
     `, [companyId, startDate]);
 
     // Checklists mais executados
-    const topChecklists = dbAll(`
+    const topChecklists = await dbAllAsync(`
       SELECT c.id, c.title, COUNT(e.id) as execution_count
       FROM checklists c
       LEFT JOIN checklist_executions e ON c.id = e.checklist_id AND e.executed_at >= ?
@@ -305,7 +305,7 @@ router.get('/stats/:companyId', authenticateToken, (req, res) => {
     `, [startDate, companyId]);
 
     // Execuções por dia
-    const executionsByDay = dbAll(`
+    const executionsByDay = await dbAllAsync(`
       SELECT DATE(e.executed_at) as date, COUNT(*) as count
       FROM checklist_executions e
       JOIN checklists c ON e.checklist_id = c.id
@@ -315,7 +315,7 @@ router.get('/stats/:companyId', authenticateToken, (req, res) => {
     `, [companyId, startDate]);
 
     // Usuários mais ativos
-    const topUsers = dbAll(`
+    const topUsers = await dbAllAsync(`
       SELECT u.id, u.name, COUNT(e.id) as execution_count
       FROM users u
       JOIN checklist_executions e ON e.executed_by = u.id
@@ -327,7 +327,7 @@ router.get('/stats/:companyId', authenticateToken, (req, res) => {
     `, [companyId, startDate]);
 
     // Execuções por categoria
-    const executionsByCategory = dbAll(`
+    const executionsByCategory = await dbAllAsync(`
       SELECT cat.id, cat.name, COUNT(e.id) as execution_count
       FROM checklist_categories cat
       LEFT JOIN checklists c ON c.category_id = cat.id

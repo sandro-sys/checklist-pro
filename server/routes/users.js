@@ -2,13 +2,13 @@ import express from 'express';
 import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
 import validator from 'validator';
-import { dbRun, dbGet, dbAll } from '../database/init.js';
+import { dbRunAsync, dbGetAsync, dbAllAsync } from '../database/init.js';
 import { authenticateToken } from '../middleware/auth.js';
 
 const router = express.Router();
 
 // Listar todos os usuários da empresa
-router.get('/', authenticateToken, (req, res) => {
+router.get('/', authenticateToken, async (req, res) => {
   try {
     const companyId = req.user.company_id;
     
@@ -16,7 +16,7 @@ router.get('/', authenticateToken, (req, res) => {
       return res.status(400).json({ error: 'Usuário não vinculado a uma empresa' });
     }
 
-    const users = dbAll(`
+    const users = await dbAllAsync(`
       SELECT u.id, u.email, u.name, u.phone, u.role_type, u.role_id, u.is_active, u.last_login, u.created_at,
              r.name as role_name
       FROM users u
@@ -33,11 +33,11 @@ router.get('/', authenticateToken, (req, res) => {
 });
 
 // Obter usuário por ID
-router.get('/:id', authenticateToken, (req, res) => {
+router.get('/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
 
-    const user = dbGet(`
+    const user = await dbGetAsync(`
       SELECT u.id, u.email, u.name, u.phone, u.role_type, u.role_id, u.company_id, u.is_active, u.last_login, u.created_at,
              r.name as role_name,
              c.name as company_name
@@ -83,7 +83,7 @@ router.post('/', authenticateToken, async (req, res) => {
     }
 
     // Verificar se email já existe
-    const existingUser = dbGet('SELECT id FROM users WHERE email = ?', [email.toLowerCase()]);
+    const existingUser = await dbGetAsync('SELECT id FROM users WHERE email = ?', [email.toLowerCase()]);
     if (existingUser) {
       return res.status(400).json({ error: 'Este email já está cadastrado' });
     }
@@ -94,13 +94,13 @@ router.post('/', authenticateToken, async (req, res) => {
     
     const userId = uuidv4();
 
-    dbRun(`
+    await dbRunAsync(`
       INSERT INTO users (id, email, password, name, phone, role_type, role_id, company_id, lgpd_consent, lgpd_consent_date)
       VALUES (?, ?, ?, ?, ?, 'user', ?, ?, 0, NULL)
     `, [userId, email.toLowerCase(), hashedPassword, name, phone || null, role_id || null, companyId]);
 
     // Log de auditoria
-    dbRun(`
+    await dbRunAsync(`
       INSERT INTO audit_logs (id, user_id, action, entity_type, entity_id, details)
       VALUES (?, ?, 'CREATE', 'user', ?, ?)
     `, [uuidv4(), req.user.id, userId, JSON.stringify({ name, email, created_by: req.user.name })]);
@@ -122,7 +122,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
     const { id } = req.params;
     const { name, phone, role_id, is_active } = req.body;
 
-    const user = dbGet('SELECT * FROM users WHERE id = ?', [id]);
+    const user = await dbGetAsync('SELECT * FROM users WHERE id = ?', [id]);
     if (!user) {
       return res.status(404).json({ error: 'Usuário não encontrado' });
     }
@@ -132,7 +132,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
       return res.status(403).json({ error: 'Acesso negado' });
     }
 
-    dbRun(`
+    await dbRunAsync(`
       UPDATE users 
       SET name = ?, phone = ?, role_id = ?, is_active = ?, updated_at = ?
       WHERE id = ?
@@ -146,7 +146,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
     ]);
 
     // Log de auditoria
-    dbRun(`
+    await dbRunAsync(`
       INSERT INTO audit_logs (id, user_id, action, entity_type, entity_id, details)
       VALUES (?, ?, 'UPDATE', 'user', ?, ?)
     `, [uuidv4(), req.user.id, id, JSON.stringify({ updated_fields: Object.keys(req.body) })]);
@@ -169,7 +169,7 @@ router.put('/:id/password', authenticateToken, async (req, res) => {
       return res.status(403).json({ error: 'Acesso negado' });
     }
 
-    const user = dbGet('SELECT * FROM users WHERE id = ?', [id]);
+    const user = await dbGetAsync('SELECT * FROM users WHERE id = ?', [id]);
     if (!user) {
       return res.status(404).json({ error: 'Usuário não encontrado' });
     }
@@ -188,14 +188,14 @@ router.put('/:id/password', authenticateToken, async (req, res) => {
 
     const hashedPassword = await bcrypt.hash(new_password, 12);
 
-    dbRun('UPDATE users SET password = ?, updated_at = ? WHERE id = ?', [
+    await dbRunAsync('UPDATE users SET password = ?, updated_at = ? WHERE id = ?', [
       hashedPassword,
       new Date().toISOString(),
       id
     ]);
 
     // Log de auditoria
-    dbRun(`
+    await dbRunAsync(`
       INSERT INTO audit_logs (id, user_id, action, entity_type, entity_id, details)
       VALUES (?, ?, 'PASSWORD_CHANGE', 'user', ?, ?)
     `, [uuidv4(), req.user.id, id, JSON.stringify({ changed_by: req.user.name })]);
@@ -208,11 +208,11 @@ router.put('/:id/password', authenticateToken, async (req, res) => {
 });
 
 // Desativar/Ativar usuário
-router.put('/:id/toggle-active', authenticateToken, (req, res) => {
+router.put('/:id/toggle-active', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
 
-    const user = dbGet('SELECT * FROM users WHERE id = ?', [id]);
+    const user = await dbGetAsync('SELECT * FROM users WHERE id = ?', [id]);
     if (!user) {
       return res.status(404).json({ error: 'Usuário não encontrado' });
     }
@@ -229,14 +229,14 @@ router.put('/:id/toggle-active', authenticateToken, (req, res) => {
 
     const newStatus = user.is_active ? 0 : 1;
 
-    dbRun('UPDATE users SET is_active = ?, updated_at = ? WHERE id = ?', [
+    await dbRunAsync('UPDATE users SET is_active = ?, updated_at = ? WHERE id = ?', [
       newStatus,
       new Date().toISOString(),
       id
     ]);
 
     // Log de auditoria
-    dbRun(`
+    await dbRunAsync(`
       INSERT INTO audit_logs (id, user_id, action, entity_type, entity_id, details)
       VALUES (?, ?, ?, 'user', ?, ?)
     `, [uuidv4(), req.user.id, newStatus ? 'ACTIVATE' : 'DEACTIVATE', id, JSON.stringify({ user_name: user.name })]);
@@ -252,11 +252,11 @@ router.put('/:id/toggle-active', authenticateToken, (req, res) => {
 });
 
 // Deletar usuário (soft delete - apenas desativa)
-router.delete('/:id', authenticateToken, (req, res) => {
+router.delete('/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
 
-    const user = dbGet('SELECT * FROM users WHERE id = ?', [id]);
+    const user = await dbGetAsync('SELECT * FROM users WHERE id = ?', [id]);
     if (!user) {
       return res.status(404).json({ error: 'Usuário não encontrado' });
     }
@@ -272,19 +272,19 @@ router.delete('/:id', authenticateToken, (req, res) => {
     }
 
     // Não pode deletar o owner da empresa
-    const company = dbGet('SELECT owner_id FROM companies WHERE id = ?', [user.company_id]);
+    const company = await dbGetAsync('SELECT owner_id FROM companies WHERE id = ?', [user.company_id]);
     if (company && company.owner_id === id) {
       return res.status(400).json({ error: 'Não é possível excluir o proprietário da empresa' });
     }
 
     // Soft delete
-    dbRun('UPDATE users SET is_active = 0, updated_at = ? WHERE id = ?', [
+    await dbRunAsync('UPDATE users SET is_active = 0, updated_at = ? WHERE id = ?', [
       new Date().toISOString(),
       id
     ]);
 
     // Log de auditoria
-    dbRun(`
+    await dbRunAsync(`
       INSERT INTO audit_logs (id, user_id, action, entity_type, entity_id, details)
       VALUES (?, ?, 'DELETE', 'user', ?, ?)
     `, [uuidv4(), req.user.id, id, JSON.stringify({ user_name: user.name })]);
@@ -297,4 +297,3 @@ router.delete('/:id', authenticateToken, (req, res) => {
 });
 
 export default router;
-

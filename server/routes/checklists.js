@@ -1,7 +1,7 @@
 import express from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import QRCode from 'qrcode';
-import { dbRun, dbGet, dbAll } from '../database/init.js';
+import { dbRunAsync, dbGetAsync, dbAllAsync } from '../database/init.js';
 import { authenticateToken } from '../middleware/auth.js';
 
 const router = express.Router();
@@ -178,7 +178,7 @@ router.post('/', authenticateToken, async (req, res) => {
     }
 
     // Gerar QR Code
-    const qrCodeUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/execute/${checklistId}`;
+    const qrCodeUrl = `${process.env.FRONTEND_URL || 'https://checklist-pro.onrender.com'}/execute/${checklistId}`;
     const qrCode = await QRCode.toDataURL(qrCodeUrl, {
       width: 300,
       margin: 2,
@@ -186,7 +186,7 @@ router.post('/', authenticateToken, async (req, res) => {
     });
 
     // Inserir checklist
-    dbRun(`
+    await dbRunAsync(`
       INSERT INTO checklists (id, title, description, category_id, company_id, periodicity, schedule_time, schedule_days, qr_code, created_by)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
@@ -204,8 +204,9 @@ router.post('/', authenticateToken, async (req, res) => {
 
     // Inserir itens
     if (checklistItems && checklistItems.length > 0) {
-      checklistItems.forEach((item, index) => {
-        dbRun(`
+      for (let index = 0; index < checklistItems.length; index++) {
+        const item = checklistItems[index];
+        await dbRunAsync(`
           INSERT INTO checklist_items (id, checklist_id, title, description, order_index, is_required, item_type, options)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         `, [
@@ -218,11 +219,11 @@ router.post('/', authenticateToken, async (req, res) => {
           item.item_type || 'checkbox',
           item.options ? JSON.stringify(item.options) : null
         ]);
-      });
+      }
     }
 
     // Log de auditoria
-    dbRun(`
+    await dbRunAsync(`
       INSERT INTO audit_logs (id, user_id, action, entity_type, entity_id, details)
       VALUES (?, ?, 'CREATE', 'checklist', ?, ?)
     `, [uuidv4(), req.user.id, checklistId, JSON.stringify({ title: checklistData.title })]);
@@ -243,7 +244,7 @@ router.post('/', authenticateToken, async (req, res) => {
 });
 
 // Listar checklists da empresa
-router.get('/company/:companyId', authenticateToken, (req, res) => {
+router.get('/company/:companyId', authenticateToken, async (req, res) => {
   try {
     const { companyId } = req.params;
     const { category_id, is_active } = req.query;
@@ -275,7 +276,7 @@ router.get('/company/:companyId', authenticateToken, (req, res) => {
 
     query += ' ORDER BY c.created_at DESC';
 
-    const checklists = dbAll(query, params);
+    const checklists = await dbAllAsync(query, params);
     res.json(checklists);
   } catch (error) {
     console.error('Erro ao listar checklists:', error);
@@ -284,11 +285,11 @@ router.get('/company/:companyId', authenticateToken, (req, res) => {
 });
 
 // Obter checklist por ID
-router.get('/:id', authenticateToken, (req, res) => {
+router.get('/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
 
-    const checklist = dbGet(`
+    const checklist = await dbGetAsync(`
       SELECT c.*, 
              cat.name as category_name,
              cat.icon as category_icon,
@@ -303,7 +304,7 @@ router.get('/:id', authenticateToken, (req, res) => {
       return res.status(404).json({ error: 'Checklist não encontrado' });
     }
 
-    const items = dbAll(`
+    const items = await dbAllAsync(`
       SELECT * FROM checklist_items 
       WHERE checklist_id = ? 
       ORDER BY order_index
@@ -317,11 +318,11 @@ router.get('/:id', authenticateToken, (req, res) => {
 });
 
 // Obter checklist por ID (público - para QR Code)
-router.get('/public/:id', (req, res) => {
+router.get('/public/:id', async (req, res) => {
   try {
     const { id } = req.params;
 
-    const checklist = dbGet(`
+    const checklist = await dbGetAsync(`
       SELECT c.id, c.title, c.description, c.periodicity,
              cat.name as category_name,
              cat.icon as category_icon,
@@ -336,7 +337,7 @@ router.get('/public/:id', (req, res) => {
       return res.status(404).json({ error: 'Checklist não encontrado' });
     }
 
-    const items = dbAll(`
+    const items = await dbAllAsync(`
       SELECT id, title, description, is_required, item_type, options
       FROM checklist_items 
       WHERE checklist_id = ? 
@@ -356,13 +357,13 @@ router.put('/:id', authenticateToken, async (req, res) => {
     const { id } = req.params;
     const { title, description, category_id, periodicity, schedule_time, schedule_days, is_active, items } = req.body;
 
-    const checklist = dbGet('SELECT * FROM checklists WHERE id = ?', [id]);
+    const checklist = await dbGetAsync('SELECT * FROM checklists WHERE id = ?', [id]);
     if (!checklist) {
       return res.status(404).json({ error: 'Checklist não encontrado' });
     }
 
     // Atualizar checklist
-    dbRun(`
+    await dbRunAsync(`
       UPDATE checklists 
       SET title = ?, description = ?, category_id = ?, periodicity = ?, 
           schedule_time = ?, schedule_days = ?, is_active = ?, updated_at = ?
@@ -382,11 +383,12 @@ router.put('/:id', authenticateToken, async (req, res) => {
     // Atualizar itens se fornecidos
     if (items && Array.isArray(items)) {
       // Remover itens antigos
-      dbRun('DELETE FROM checklist_items WHERE checklist_id = ?', [id]);
+      await dbRunAsync('DELETE FROM checklist_items WHERE checklist_id = ?', [id]);
 
       // Inserir novos itens
-      items.forEach((item, index) => {
-        dbRun(`
+      for (let index = 0; index < items.length; index++) {
+        const item = items[index];
+        await dbRunAsync(`
           INSERT INTO checklist_items (id, checklist_id, title, description, order_index, is_required, item_type, options)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         `, [
@@ -399,11 +401,11 @@ router.put('/:id', authenticateToken, async (req, res) => {
           item.item_type || 'checkbox',
           item.options ? JSON.stringify(item.options) : null
         ]);
-      });
+      }
     }
 
     // Log de auditoria
-    dbRun(`
+    await dbRunAsync(`
       INSERT INTO audit_logs (id, user_id, action, entity_type, entity_id, details)
       VALUES (?, ?, 'UPDATE', 'checklist', ?, ?)
     `, [uuidv4(), req.user.id, id, JSON.stringify({ updated_fields: Object.keys(req.body) })]);
@@ -416,20 +418,20 @@ router.put('/:id', authenticateToken, async (req, res) => {
 });
 
 // Deletar checklist
-router.delete('/:id', authenticateToken, (req, res) => {
+router.delete('/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
 
-    const checklist = dbGet('SELECT * FROM checklists WHERE id = ?', [id]);
+    const checklist = await dbGetAsync('SELECT * FROM checklists WHERE id = ?', [id]);
     if (!checklist) {
       return res.status(404).json({ error: 'Checklist não encontrado' });
     }
 
     // Soft delete - apenas desativa
-    dbRun('UPDATE checklists SET is_active = 0, updated_at = ? WHERE id = ?', [new Date().toISOString(), id]);
+    await dbRunAsync('UPDATE checklists SET is_active = 0, updated_at = ? WHERE id = ?', [new Date().toISOString(), id]);
 
     // Log de auditoria
-    dbRun(`
+    await dbRunAsync(`
       INSERT INTO audit_logs (id, user_id, action, entity_type, entity_id, details)
       VALUES (?, ?, 'DELETE', 'checklist', ?, ?)
     `, [uuidv4(), req.user.id, id, JSON.stringify({ title: checklist.title })]);
@@ -446,14 +448,14 @@ router.post('/:id/regenerate-qrcode', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
 
-    const qrCodeUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/execute/${id}`;
+    const qrCodeUrl = `${process.env.FRONTEND_URL || 'https://checklist-pro.onrender.com'}/execute/${id}`;
     const qrCode = await QRCode.toDataURL(qrCodeUrl, {
       width: 300,
       margin: 2,
       color: { dark: '#1a1a2e', light: '#ffffff' }
     });
 
-    dbRun('UPDATE checklists SET qr_code = ?, updated_at = ? WHERE id = ?', [qrCode, new Date().toISOString(), id]);
+    await dbRunAsync('UPDATE checklists SET qr_code = ?, updated_at = ? WHERE id = ?', [qrCode, new Date().toISOString(), id]);
 
     res.json({ qr_code: qrCode });
   } catch (error) {

@@ -3,7 +3,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { v4 as uuidv4 } from 'uuid';
 import validator from 'validator';
-import { dbRun, dbGet, dbAll, saveDatabase } from '../database/init.js';
+import { dbRunAsync, dbGetAsync, dbAllAsync } from '../database/init.js';
 import { authenticateToken } from '../middleware/auth.js';
 
 const router = express.Router();
@@ -31,7 +31,7 @@ router.post('/register', async (req, res) => {
     }
 
     // Verificar se email já existe
-    const existingUser = dbGet('SELECT id FROM users WHERE email = ?', [email.toLowerCase()]);
+    const existingUser = await dbGetAsync('SELECT id FROM users WHERE email = ?', [email.toLowerCase()]);
     if (existingUser) {
       return res.status(400).json({ error: 'Este email já está cadastrado' });
     }
@@ -41,13 +41,13 @@ router.post('/register', async (req, res) => {
     const userId = uuidv4();
 
     // Inserir usuário
-    dbRun(`
+    await dbRunAsync(`
       INSERT INTO users (id, email, password, name, role_type, lgpd_consent, lgpd_consent_date)
       VALUES (?, ?, ?, ?, 'owner', 1, ?)
     `, [userId, email.toLowerCase(), hashedPassword, name, new Date().toISOString()]);
 
     // Log de auditoria
-    dbRun(`
+    await dbRunAsync(`
       INSERT INTO audit_logs (id, user_id, action, entity_type, entity_id, details)
       VALUES (?, ?, 'CREATE', 'user', ?, ?)
     `, [uuidv4(), userId, userId, JSON.stringify({ action: 'user_registration' })]);
@@ -67,7 +67,7 @@ router.post('/register', async (req, res) => {
 
     // Salvar refresh token
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
-    dbRun(`
+    await dbRunAsync(`
       INSERT INTO refresh_tokens (id, user_id, token, expires_at)
       VALUES (?, ?, ?, ?)
     `, [uuidv4(), userId, refreshToken, expiresAt]);
@@ -93,7 +93,7 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ error: 'Email e senha são obrigatórios' });
     }
 
-    const user = dbGet(`
+    const user = await dbGetAsync(`
       SELECT u.*, c.id as company_id, c.name as company_name 
       FROM users u 
       LEFT JOIN companies c ON u.company_id = c.id OR c.owner_id = u.id
@@ -130,13 +130,13 @@ router.post('/login', async (req, res) => {
 
     // Salvar refresh token
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
-    dbRun(`
+    await dbRunAsync(`
       INSERT INTO refresh_tokens (id, user_id, token, expires_at)
       VALUES (?, ?, ?, ?)
     `, [uuidv4(), user.id, refreshToken, expiresAt]);
 
     // Log de auditoria
-    dbRun(`
+    await dbRunAsync(`
       INSERT INTO audit_logs (id, user_id, action, entity_type, entity_id, details)
       VALUES (?, ?, 'LOGIN', 'user', ?, ?)
     `, [uuidv4(), user.id, user.id, JSON.stringify({ action: 'user_login' })]);
@@ -168,20 +168,20 @@ router.post('/refresh', async (req, res) => {
       return res.status(401).json({ error: 'Refresh token não fornecido' });
     }
 
-    const storedToken = dbGet(`
-      SELECT * FROM refresh_tokens WHERE token = ? AND expires_at > datetime('now')
+    const storedToken = await dbGetAsync(`
+      SELECT * FROM refresh_tokens WHERE token = ? AND expires_at > NOW()
     `, [refreshToken]);
 
     if (!storedToken) {
       return res.status(403).json({ error: 'Refresh token inválido ou expirado' });
     }
 
-    jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET || 'default_refresh_secret', (err, decoded) => {
+    jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET || 'default_refresh_secret', async (err, decoded) => {
       if (err) {
         return res.status(403).json({ error: 'Refresh token inválido' });
       }
 
-      const user = dbGet(`
+      const user = await dbGetAsync(`
         SELECT u.*, c.id as company_id 
         FROM users u 
         LEFT JOIN companies c ON u.company_id = c.id OR c.owner_id = u.id
@@ -213,16 +213,16 @@ router.post('/refresh', async (req, res) => {
 });
 
 // Logout
-router.post('/logout', authenticateToken, (req, res) => {
+router.post('/logout', authenticateToken, async (req, res) => {
   try {
     const { refreshToken } = req.body;
 
     if (refreshToken) {
-      dbRun('DELETE FROM refresh_tokens WHERE token = ?', [refreshToken]);
+      await dbRunAsync('DELETE FROM refresh_tokens WHERE token = ?', [refreshToken]);
     }
 
     // Log de auditoria
-    dbRun(`
+    await dbRunAsync(`
       INSERT INTO audit_logs (id, user_id, action, entity_type, entity_id, details)
       VALUES (?, ?, 'LOGOUT', 'user', ?, ?)
     `, [uuidv4(), req.user.id, req.user.id, JSON.stringify({ action: 'user_logout' })]);
@@ -235,9 +235,9 @@ router.post('/logout', authenticateToken, (req, res) => {
 });
 
 // Obter perfil do usuário
-router.get('/me', authenticateToken, (req, res) => {
+router.get('/me', authenticateToken, async (req, res) => {
   try {
-    const user = dbGet(`
+    const user = await dbGetAsync(`
       SELECT u.id, u.email, u.name, u.role_type, u.company_id, u.created_at,
              c.name as company_name
       FROM users u
@@ -257,10 +257,10 @@ router.get('/me', authenticateToken, (req, res) => {
 });
 
 // Solicitar exclusão de dados (LGPD)
-router.post('/request-deletion', authenticateToken, (req, res) => {
+router.post('/request-deletion', authenticateToken, async (req, res) => {
   try {
     // Log de auditoria
-    dbRun(`
+    await dbRunAsync(`
       INSERT INTO audit_logs (id, user_id, action, entity_type, entity_id, details)
       VALUES (?, ?, 'DELETION_REQUEST', 'user', ?, ?)
     `, [uuidv4(), req.user.id, req.user.id, JSON.stringify({ 
