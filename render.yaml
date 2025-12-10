@@ -1,0 +1,38 @@
+# Render Blueprint - CheckList Pro
+# https://render.com/docs/blueprint-spec
+
+services:
+  # Backend API
+  - type: web
+    name: checklist-pro-api
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: node server/index.js
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3001
+      - key: JWT_SECRET
+        generateValue: true
+      - key: REFRESH_TOKEN_SECRET
+        generateValue: true
+      - key: DATABASE_URL
+        fromDatabase:
+          name: checklist-pro-db
+          property: connectionString
+      - key: FRONTEND_URL
+        sync: false # Definir manualmente após deploy do frontend
+      - key: MP_ACCESS_TOKEN
+        sync: false # Token do Mercado Pago - definir manualmente
+      - key: MP_PUBLIC_KEY
+        sync: false # Chave pública do Mercado Pago - definir manualmente
+
+databases:
+  - name: checklist-pro-db
+    plan: free
+    databaseName: checklistpro
+    user: checklistpro_user
+
