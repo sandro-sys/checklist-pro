@@ -1,18 +1,9 @@
 import express from 'express';
 import { v4 as uuidv4 } from 'uuid';
-import { MercadoPagoConfig, PreApproval, Payment } from 'mercadopago';
 import { dbRunAsync, dbGetAsync, dbAllAsync } from '../database/init.js';
 import { authenticateToken } from '../middleware/auth.js';
 
 const router = express.Router();
-
-// Configurar Mercado Pago
-const mpClient = new MercadoPagoConfig({ 
-  accessToken: process.env.MP_ACCESS_TOKEN || 'TEST-ACCESS-TOKEN'
-});
-
-const preApproval = new PreApproval(mpClient);
-const payment = new Payment(mpClient);
 
 // Planos disponiveis
 const PLANS = {
@@ -42,7 +33,7 @@ const PLANS = {
     name: 'Pro',
     price: 99.90,
     features: {
-      max_checklists: -1, // ilimitado
+      max_checklists: -1,
       max_users: -1,
       history_days: -1
     }
@@ -92,7 +83,7 @@ router.get('/subscription', authenticateToken, async (req, res) => {
   }
 });
 
-// Criar assinatura (pre-approval) no Mercado Pago
+// Criar assinatura usando a API REST do Mercado Pago
 router.post('/subscribe', authenticateToken, async (req, res) => {
   try {
     const { plan_id } = req.body;
@@ -111,12 +102,22 @@ router.post('/subscribe', authenticateToken, async (req, res) => {
     `, [req.user.id]);
 
     if (!company) {
-      return res.status(404).json({ error: 'Empresa nao encontrada' });
+      return res.status(404).json({ error: 'Empresa nao encontrada. Cadastre sua empresa primeiro.' });
     }
 
     const user = await dbGetAsync('SELECT * FROM users WHERE id = ?', [req.user.id]);
 
-    // Criar pre-approval (assinatura) no Mercado Pago
+    if (!user) {
+      return res.status(404).json({ error: 'Usuario nao encontrado' });
+    }
+
+    const accessToken = process.env.MP_ACCESS_TOKEN;
+    
+    if (!accessToken || accessToken === 'TEST-ACCESS-TOKEN') {
+      return res.status(500).json({ error: 'Token do Mercado Pago nao configurado' });
+    }
+
+    // Criar pre-approval (assinatura) usando fetch direto na API
     const subscriptionData = {
       reason: `CheckList Pro - Plano ${plan.name}`,
       auto_recurring: {
@@ -125,25 +126,46 @@ router.post('/subscribe', authenticateToken, async (req, res) => {
         transaction_amount: plan.price,
         currency_id: 'BRL'
       },
-      back_url: `${process.env.FRONTEND_URL || 'https://checklist-pro.onrender.com'}/pricing?status=success`,
+      back_url: `${process.env.FRONTEND_URL || 'https://checklist-pro.rhumarh.com'}/pricing?status=success`,
       payer_email: user.email,
       external_reference: `${company.id}|${plan_id}|${uuidv4()}`
     };
 
-    const response = await preApproval.create({ body: subscriptionData });
+    console.log('Criando assinatura MP:', JSON.stringify(subscriptionData));
+
+    const mpResponse = await fetch('https://api.mercadopago.com/preapproval', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(subscriptionData)
+    });
+
+    const responseData = await mpResponse.json();
+
+    console.log('Resposta MP:', JSON.stringify(responseData));
+
+    if (!mpResponse.ok) {
+      console.error('Erro MP:', responseData);
+      return res.status(400).json({ 
+        error: 'Erro ao criar assinatura no Mercado Pago', 
+        details: responseData.message || responseData.error || 'Erro desconhecido'
+      });
+    }
 
     // Salvar assinatura pendente no banco
     const subscriptionId = uuidv4();
     await dbRunAsync(`
       INSERT INTO subscriptions (id, company_id, plan, status, mp_preapproval_id, price)
       VALUES (?, ?, ?, 'pending', ?, ?)
-    `, [subscriptionId, company.id, plan_id, response.id, plan.price]);
+    `, [subscriptionId, company.id, plan_id, responseData.id, plan.price]);
 
     res.json({
       subscription_id: subscriptionId,
-      mp_id: response.id,
-      init_point: response.init_point,
-      sandbox_init_point: response.sandbox_init_point
+      mp_id: responseData.id,
+      init_point: responseData.init_point,
+      sandbox_init_point: responseData.sandbox_init_point
     });
   } catch (error) {
     console.error('Erro ao criar assinatura:', error);
@@ -158,69 +180,76 @@ router.post('/webhook', async (req, res) => {
 
     console.log('Webhook MP recebido:', type, data);
 
+    const accessToken = process.env.MP_ACCESS_TOKEN;
+
     if (type === 'payment') {
-      // Pagamento recebido
-      const paymentData = await payment.get({ id: data.id });
+      // Buscar dados do pagamento
+      const paymentResponse = await fetch(`https://api.mercadopago.com/v1/payments/${data.id}`, {
+        headers: { 'Authorization': `Bearer ${accessToken}` }
+      });
+      const paymentData = await paymentResponse.json();
       
       if (paymentData.status === 'approved') {
         const externalRef = paymentData.external_reference;
-        const [companyId, planId] = externalRef.split('|');
+        if (externalRef) {
+          const [companyId, planId] = externalRef.split('|');
 
-        // Atualizar empresa com o plano
-        const plan = PLANS[planId];
-        const expiresAt = new Date();
-        expiresAt.setMonth(expiresAt.getMonth() + 1);
+          const expiresAt = new Date();
+          expiresAt.setMonth(expiresAt.getMonth() + 1);
 
-        await dbRunAsync(`
-          UPDATE companies 
-          SET plan = ?, plan_expires_at = ?, updated_at = ?
-          WHERE id = ?
-        `, [planId, expiresAt.toISOString(), new Date().toISOString(), companyId]);
+          await dbRunAsync(`
+            UPDATE companies 
+            SET plan = ?, plan_expires_at = ?, updated_at = ?
+            WHERE id = ?
+          `, [planId, expiresAt.toISOString(), new Date().toISOString(), companyId]);
 
-        // Registrar pagamento
-        await dbRunAsync(`
-          INSERT INTO payments (id, company_id, mp_payment_id, amount, status, payment_method, paid_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?)
-        `, [
-          uuidv4(),
-          companyId,
-          paymentData.id.toString(),
-          paymentData.transaction_amount,
-          'approved',
-          paymentData.payment_method_id,
-          new Date().toISOString()
-        ]);
+          await dbRunAsync(`
+            INSERT INTO payments (id, company_id, mp_payment_id, amount, status, payment_method, paid_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+          `, [
+            uuidv4(),
+            companyId,
+            paymentData.id.toString(),
+            paymentData.transaction_amount,
+            'approved',
+            paymentData.payment_method_id,
+            new Date().toISOString()
+          ]);
 
-        // Atualizar status da assinatura
-        await dbRunAsync(`
-          UPDATE subscriptions 
-          SET status = 'active', start_date = ?, end_date = ?, updated_at = ?
-          WHERE company_id = ? AND status = 'pending'
-        `, [new Date().toISOString(), expiresAt.toISOString(), new Date().toISOString(), companyId]);
+          await dbRunAsync(`
+            UPDATE subscriptions 
+            SET status = 'active', start_date = ?, end_date = ?, updated_at = ?
+            WHERE company_id = ? AND status = 'pending'
+          `, [new Date().toISOString(), expiresAt.toISOString(), new Date().toISOString(), companyId]);
+        }
       }
-    } else if (type === 'subscription_preapproval') {
-      // Assinatura criada/atualizada
-      const preApprovalData = await preApproval.get({ id: data.id });
+    } else if (type === 'subscription_preapproval' || type === 'subscription_authorized_payment') {
+      // Buscar dados da assinatura
+      const preapprovalResponse = await fetch(`https://api.mercadopago.com/preapproval/${data.id}`, {
+        headers: { 'Authorization': `Bearer ${accessToken}` }
+      });
+      const preapprovalData = await preapprovalResponse.json();
       
-      if (preApprovalData.status === 'authorized') {
-        const externalRef = preApprovalData.external_reference;
-        const [companyId, planId] = externalRef.split('|');
+      if (preapprovalData.status === 'authorized') {
+        const externalRef = preapprovalData.external_reference;
+        if (externalRef) {
+          const [companyId, planId] = externalRef.split('|');
 
-        const plan = PLANS[planId];
-        const expiresAt = new Date();
-        expiresAt.setMonth(expiresAt.getMonth() + 1);
+          const expiresAt = new Date();
+          expiresAt.setMonth(expiresAt.getMonth() + 1);
 
-        await dbRunAsync(`
-          UPDATE companies 
-          SET plan = ?, plan_expires_at = ?, mp_subscription_id = ?, updated_at = ?
-          WHERE id = ?
-        `, [planId, expiresAt.toISOString(), data.id, new Date().toISOString(), companyId]);
+          await dbRunAsync(`
+            UPDATE companies 
+            SET plan = ?, plan_expires_at = ?, mp_subscription_id = ?, updated_at = ?
+            WHERE id = ?
+          `, [planId, expiresAt.toISOString(), data.id, new Date().toISOString(), companyId]);
 
-        await dbRunAsync(`
-          UPDATE subscriptions 
-          SET status = 'active', mp_subscription_id = ?, start_date = ?, end_date = ?, updated_at = ?
-          WHERE company_id = ? AND mp_preapproval_id = ?
-        `, [data.id, new Date().toISOString(), expiresAt.toISOString(), new Date().toISOString(), companyId, data.id]);
+          await dbRunAsync(`
+            UPDATE subscriptions 
+            SET status = 'active', mp_subscription_id = ?, start_date = ?, end_date = ?, updated_at = ?
+            WHERE company_id = ? AND mp_preapproval_id = ?
+          `, [data.id, new Date().toISOString(), expiresAt.toISOString(), new Date().toISOString(), companyId, data.id]);
+        }
       }
     }
 
@@ -243,17 +272,21 @@ router.post('/cancel', authenticateToken, async (req, res) => {
     }
 
     if (company.mp_subscription_id) {
+      const accessToken = process.env.MP_ACCESS_TOKEN;
       try {
-        await preApproval.update({
-          id: company.mp_subscription_id,
-          body: { status: 'cancelled' }
+        await fetch(`https://api.mercadopago.com/preapproval/${company.mp_subscription_id}`, {
+          method: 'PUT',
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ status: 'cancelled' })
         });
       } catch (e) {
         console.error('Erro ao cancelar no MP:', e);
       }
     }
 
-    // Manter o plano ate a data de expiracao
     await dbRunAsync(`
       UPDATE subscriptions 
       SET status = 'cancelled', updated_at = ?
@@ -312,7 +345,7 @@ router.post('/activate-trial', authenticateToken, async (req, res) => {
     }
 
     const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 14); // 14 dias
+    expiresAt.setDate(expiresAt.getDate() + 14);
 
     await dbRunAsync(`
       UPDATE companies 
