@@ -39,16 +39,16 @@ export default function AuthLayout() {
           {/* Features */}
           <div className="mt-12 grid grid-cols-2 gap-6 max-w-md">
             {[
-              { icon: '📋', text: 'Checklists Personalizados' },
-              { icon: '📱', text: 'Acesso via QR Code' },
-              { icon: '📊', text: 'Relatórios em Tempo Real' },
-              { icon: '🔒', text: 'Conformidade LGPD' }
+              { text: 'Checklists Personalizados' },
+              { text: 'Acesso via QR Code' },
+              { text: 'Relatórios em Tempo Real' },
+              { text: 'Conformidade LGPD' }
             ].map((feature, index) => (
               <div 
                 key={index}
                 className="flex items-center gap-3 p-4 rounded-xl bg-dark-800/50 border border-dark-700"
               >
-                <span className="text-2xl">{feature.icon}</span>
+                <div className="w-2 h-2 bg-primary-500 rounded-full"></div>
                 <span className="text-dark-200 text-sm font-medium">{feature.text}</span>
               </div>
             ))}

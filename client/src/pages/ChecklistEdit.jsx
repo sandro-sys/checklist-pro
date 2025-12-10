@@ -463,7 +463,7 @@ export default function ChecklistEdit() {
 
           {/* Tips */}
           <div className="bg-gradient-to-br from-primary-500/10 to-accent-teal/10 border border-primary-500/20 rounded-2xl p-6">
-            <h3 className="font-semibold text-white mb-3">💡 Dicas</h3>
+            <h3 className="font-semibold text-white mb-3">Dicas</h3>
             <ul className="text-sm text-dark-300 space-y-2">
               <li>• Imprima o QR Code e cole no local de execução</li>
               <li>• Funcionários podem escanear para executar o checklist</li>
