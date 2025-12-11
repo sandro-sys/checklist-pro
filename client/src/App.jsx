@@ -23,10 +23,11 @@ import PaymentSuccess from './pages/PaymentSuccess'
 import Subscriptions from './pages/Subscriptions'
 import Privacy from './pages/Privacy'
 import Terms from './pages/Terms'
+import ChangePassword from './pages/ChangePassword'
 
 // Protected Route Component
 function ProtectedRoute({ children }) {
-  const { isAuthenticated, isLoading } = useAuthStore()
+  const { isAuthenticated, isLoading, user } = useAuthStore()
   
   if (isLoading) {
     return (
@@ -38,6 +39,11 @@ function ProtectedRoute({ children }) {
   
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />
+  }
+
+  // Redirecionar para troca de senha se necessario
+  if (user?.must_change_password) {
+    return <Navigate to="/change-password" replace />
   }
   
   return children
@@ -87,6 +93,9 @@ function App() {
       
       {/* Payment Success */}
       <Route path="/payment/success" element={<PaymentSuccess />} />
+      
+      {/* Change Password (requires auth but not full layout) */}
+      <Route path="/change-password" element={<ChangePassword />} />
       
       {/* Public Checklist Execution */}
       <Route path="/execute/:checklistId" element={<ChecklistExecute />} />

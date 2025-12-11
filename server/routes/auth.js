@@ -8,6 +8,32 @@ import { authenticateToken } from '../middleware/auth.js';
 
 const router = express.Router();
 
+// Funcao para validar senha forte
+function validateStrongPassword(password) {
+  const errors = [];
+  
+  if (password.length < 8) {
+    errors.push('Minimo 8 caracteres');
+  }
+  if (!/[a-z]/.test(password)) {
+    errors.push('Pelo menos uma letra minuscula');
+  }
+  if (!/[A-Z]/.test(password)) {
+    errors.push('Pelo menos uma letra maiuscula');
+  }
+  if (!/[0-9]/.test(password)) {
+    errors.push('Pelo menos um numero');
+  }
+  if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)) {
+    errors.push('Pelo menos um caractere especial (!@#$%^&*...)');
+  }
+  
+  return {
+    isValid: errors.length === 0,
+    errors
+  };
+}
+
 // Registro de usuário
 router.post('/register', async (req, res) => {
   try {
@@ -22,8 +48,12 @@ router.post('/register', async (req, res) => {
       return res.status(400).json({ error: 'Email inválido' });
     }
 
-    if (password.length < 8) {
-      return res.status(400).json({ error: 'Senha deve ter no mínimo 8 caracteres' });
+    // Validar senha forte
+    const passwordValidation = validateStrongPassword(password);
+    if (!passwordValidation.isValid) {
+      return res.status(400).json({ 
+        error: 'Senha fraca. Requisitos: ' + passwordValidation.errors.join(', ')
+      });
     }
 
     if (!lgpd_consent) {
@@ -148,7 +178,8 @@ router.post('/login', async (req, res) => {
         name: user.name, 
         role: user.role,
         company_id: user.company_id,
-        company_name: user.company_name
+        company_name: user.company_name,
+        must_change_password: user.must_change_password === 1
       },
       accessToken,
       refreshToken
@@ -156,6 +187,87 @@ router.post('/login', async (req, res) => {
   } catch (error) {
     console.error('Erro no login:', error);
     res.status(500).json({ error: 'Erro ao fazer login' });
+  }
+});
+
+// Trocar senha
+router.post('/change-password', authenticateToken, async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ error: 'Senha atual e nova senha são obrigatórias' });
+    }
+
+    // Validar nova senha forte
+    const passwordValidation = validateStrongPassword(newPassword);
+    if (!passwordValidation.isValid) {
+      return res.status(400).json({ 
+        error: 'Nova senha fraca. Requisitos: ' + passwordValidation.errors.join(', ')
+      });
+    }
+
+    // Buscar usuario
+    const user = await dbGetAsync('SELECT * FROM users WHERE id = ?', [req.user.id]);
+    if (!user) {
+      return res.status(404).json({ error: 'Usuário não encontrado' });
+    }
+
+    // Verificar senha atual
+    const validPassword = await bcrypt.compare(currentPassword, user.password);
+    if (!validPassword) {
+      return res.status(401).json({ error: 'Senha atual incorreta' });
+    }
+
+    // Verificar se nova senha é diferente da atual
+    const samePassword = await bcrypt.compare(newPassword, user.password);
+    if (samePassword) {
+      return res.status(400).json({ error: 'A nova senha deve ser diferente da senha atual' });
+    }
+
+    // Hash da nova senha
+    const hashedPassword = await bcrypt.hash(newPassword, 12);
+
+    // Atualizar senha e remover flag de troca obrigatoria
+    await dbRunAsync(`
+      UPDATE users SET password = ?, must_change_password = 0, updated_at = ?
+      WHERE id = ?
+    `, [hashedPassword, new Date().toISOString(), req.user.id]);
+
+    // Log de auditoria
+    await dbRunAsync(`
+      INSERT INTO audit_logs (id, user_id, action, entity_type, entity_id, details)
+      VALUES (?, ?, 'PASSWORD_CHANGE', 'user', ?, ?)
+    `, [uuidv4(), req.user.id, req.user.id, JSON.stringify({ action: 'password_changed' })]);
+
+    res.json({ message: 'Senha alterada com sucesso!' });
+  } catch (error) {
+    console.error('Erro ao trocar senha:', error);
+    res.status(500).json({ error: 'Erro ao trocar senha' });
+  }
+});
+
+// Marcar todos usuarios existentes para trocar senha (admin only)
+router.post('/force-password-change-all', authenticateToken, async (req, res) => {
+  try {
+    // Verificar se e admin/owner
+    if (req.user.role !== 'owner' && req.user.role_type !== 'owner') {
+      return res.status(403).json({ error: 'Acesso negado. Apenas administradores.' });
+    }
+
+    // Marcar todos usuarios para trocar senha
+    await dbRunAsync(`UPDATE users SET must_change_password = 1`);
+
+    // Log de auditoria
+    await dbRunAsync(`
+      INSERT INTO audit_logs (id, user_id, action, entity_type, entity_id, details)
+      VALUES (?, ?, 'FORCE_PASSWORD_CHANGE', 'system', 'all', ?)
+    `, [uuidv4(), req.user.id, JSON.stringify({ action: 'force_password_change_all_users' })]);
+
+    res.json({ message: 'Todos os usuários foram marcados para trocar a senha no próximo login.' });
+  } catch (error) {
+    console.error('Erro ao forçar troca de senha:', error);
+    res.status(500).json({ error: 'Erro ao processar solicitação' });
   }
 });
 

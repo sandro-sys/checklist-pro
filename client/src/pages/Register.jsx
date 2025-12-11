@@ -1,9 +1,29 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Mail, Lock, Eye, EyeOff, User, ArrowRight, Loader2, Check } from 'lucide-react'
+import { Mail, Lock, Eye, EyeOff, User, ArrowRight, Loader2, Check, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useAuthStore } from '../store/authStore'
+
+// Validacao de senha forte
+function validatePassword(password) {
+  return {
+    minLength: password.length >= 8,
+    hasLowercase: /[a-z]/.test(password),
+    hasUppercase: /[A-Z]/.test(password),
+    hasNumber: /[0-9]/.test(password),
+    hasSpecial: /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)
+  }
+}
+
+function PasswordRequirement({ met, text }) {
+  return (
+    <div className={`flex items-center gap-2 text-xs ${met ? 'text-green-400' : 'text-dark-500'}`}>
+      {met ? <Check className="w-3 h-3" /> : <X className="w-3 h-3" />}
+      <span>{text}</span>
+    </div>
+  )
+}
 
 export default function Register() {
   const [formData, setFormData] = useState({
@@ -17,6 +37,9 @@ export default function Register() {
   const [isLoading, setIsLoading] = useState(false)
   const navigate = useNavigate()
   const { register } = useAuthStore()
+
+  const passwordValidation = useMemo(() => validatePassword(formData.password), [formData.password])
+  const isPasswordValid = Object.values(passwordValidation).every(Boolean)
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target
@@ -34,8 +57,8 @@ export default function Register() {
       return
     }
 
-    if (formData.password.length < 8) {
-      toast.error('A senha deve ter no mínimo 8 caracteres')
+    if (!isPasswordValid) {
+      toast.error('A senha não atende aos requisitos de segurança')
       return
     }
 
@@ -126,8 +149,14 @@ export default function Register() {
               name="password"
               value={formData.password}
               onChange={handleChange}
-              placeholder="Mínimo 8 caracteres"
-              className="w-full pl-12 pr-12 py-3.5 bg-dark-800/50 border border-dark-700 rounded-xl text-white placeholder-dark-500 focus:border-primary-500 focus:ring-1 focus:ring-primary-500 transition-all"
+              placeholder="Senha forte"
+              className={`w-full pl-12 pr-12 py-3.5 bg-dark-800/50 border rounded-xl text-white placeholder-dark-500 focus:ring-1 transition-all ${
+                formData.password 
+                  ? isPasswordValid 
+                    ? 'border-green-500 focus:border-green-500 focus:ring-green-500' 
+                    : 'border-yellow-500 focus:border-yellow-500 focus:ring-yellow-500'
+                  : 'border-dark-700 focus:border-primary-500 focus:ring-primary-500'
+              }`}
             />
             <button
               type="button"
@@ -137,6 +166,24 @@ export default function Register() {
               {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
             </button>
           </div>
+          
+          {/* Password Requirements */}
+          {formData.password && (
+            <motion.div 
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              className="mt-3 p-3 bg-dark-800/50 rounded-lg border border-dark-700"
+            >
+              <p className="text-xs text-dark-400 mb-2">Requisitos da senha:</p>
+              <div className="grid grid-cols-2 gap-1">
+                <PasswordRequirement met={passwordValidation.minLength} text="8+ caracteres" />
+                <PasswordRequirement met={passwordValidation.hasLowercase} text="Letra minúscula" />
+                <PasswordRequirement met={passwordValidation.hasUppercase} text="Letra maiúscula" />
+                <PasswordRequirement met={passwordValidation.hasNumber} text="Número" />
+                <PasswordRequirement met={passwordValidation.hasSpecial} text="Caractere especial" />
+              </div>
+            </motion.div>
+          )}
         </div>
 
         {/* Confirm Password */}

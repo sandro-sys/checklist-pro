@@ -17,7 +17,7 @@ import rolesRoutes from './routes/roles.js';
 import paymentsRoutes from './routes/payments.js';
 
 // Database
-import { initDatabase } from './database/init.js';
+import { initDatabase, dbRunAsync } from './database/init.js';
 
 dotenv.config();
 
@@ -78,9 +78,32 @@ app.use('/api/users', usersRoutes);
 app.use('/api/roles', rolesRoutes);
 app.use('/api/payments', paymentsRoutes);
 
-// Health check
+// Health check (tambem usado pelo cron para manter servidor acordado)
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// Endpoint para marcar usuarios existentes para trocar senha (executar uma vez)
+app.post('/api/admin/force-password-migration', async (req, res) => {
+  try {
+    const { secret } = req.body;
+    
+    // Verificar secret para proteger o endpoint
+    if (secret !== process.env.ADMIN_SECRET && secret !== 'migrate-passwords-2024') {
+      return res.status(403).json({ error: 'Acesso negado' });
+    }
+    
+    // Marcar todos usuarios para trocar senha
+    await dbRunAsync(`UPDATE users SET must_change_password = 1 WHERE must_change_password = 0 OR must_change_password IS NULL`);
+    
+    res.json({ 
+      success: true, 
+      message: 'Todos os usuarios foram marcados para trocar a senha no proximo login.' 
+    });
+  } catch (error) {
+    console.error('Erro na migracao:', error);
+    res.status(500).json({ error: 'Erro ao processar migracao' });
+  }
 });
 
 // Serve static files in production

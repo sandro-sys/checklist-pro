@@ -98,6 +98,32 @@ export const useAuthStore = create(
         }
       },
 
+      changePassword: async (currentPassword, newPassword) => {
+        try {
+          await api.post('/auth/change-password', { currentPassword, newPassword })
+          
+          // Atualizar usuario para remover flag must_change_password
+          const { user } = get()
+          if (user) {
+            set({ user: { ...user, must_change_password: false } })
+          }
+          
+          return { success: true }
+        } catch (error) {
+          return { 
+            success: false, 
+            error: error.response?.data?.error || 'Erro ao trocar senha' 
+          }
+        }
+      },
+
+      clearMustChangePassword: () => {
+        const { user } = get()
+        if (user) {
+          set({ user: { ...user, must_change_password: false } })
+        }
+      },
+
       fetchUser: async () => {
         try {
           const { accessToken } = get()

@@ -79,10 +79,18 @@ async function initPostgres() {
       lgpd_consent INTEGER DEFAULT 0,
       lgpd_consent_date TEXT,
       last_login TEXT,
+      must_change_password INTEGER DEFAULT 0,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `);
+
+  // Migracao: adicionar coluna must_change_password se nao existir
+  try {
+    await pgPool.query(`ALTER TABLE users ADD COLUMN must_change_password INTEGER DEFAULT 0`);
+  } catch (e) {
+    // Coluna ja existe
+  }
 
   await pgPool.query(`
     CREATE TABLE IF NOT EXISTS companies (
@@ -285,6 +293,7 @@ async function initSQLite() {
       lgpd_consent INTEGER DEFAULT 0,
       lgpd_consent_date TEXT,
       last_login TEXT,
+      must_change_password INTEGER DEFAULT 0,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT DEFAULT CURRENT_TIMESTAMP
     )
@@ -452,6 +461,9 @@ async function initSQLite() {
   } catch (e) {}
   try {
     db.run(`ALTER TABLE companies ADD COLUMN mp_subscription_id TEXT`);
+  } catch (e) {}
+  try {
+    db.run(`ALTER TABLE users ADD COLUMN must_change_password INTEGER DEFAULT 0`);
   } catch (e) {}
 
   saveDatabase();
