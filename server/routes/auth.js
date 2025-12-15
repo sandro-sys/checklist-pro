@@ -314,22 +314,32 @@ router.post('/forgot-password', async (req, res) => {
     const baseUrl = process.env.FRONTEND_URL || 'https://checklist-pro.rhumarh.com';
     const resetLink = `${baseUrl}/reset-password?token=${resetToken}`;
 
-    // Enviar email
-    await sendPasswordReset(user.email, {
-      userName: user.name,
-      resetLink,
-      expiresIn: '1 hora'
-    });
-
     // Log de auditoria
     await dbRunAsync(`
       INSERT INTO audit_logs (id, user_id, action, entity_type, entity_id, details)
       VALUES (?, ?, 'PASSWORD_RESET_REQUEST', 'user', ?, ?)
     `, [uuidv4(), user.id, user.id, JSON.stringify({ action: 'password_reset_requested' })]);
 
+    // Responder imediatamente ao usuario
     res.json({ 
       message: 'Se o email estiver cadastrado, você receberá um link para recuperação de senha.' 
     });
+
+    // Enviar email em background (nao bloqueia a resposta)
+    sendPasswordReset(user.email, {
+      userName: user.name,
+      resetLink,
+      expiresIn: '1 hora'
+    }).then(result => {
+      if (result.success) {
+        console.log('📧 Email de recuperação enviado para:', user.email);
+      } else {
+        console.error('❌ Erro ao enviar email de recuperação:', result.error);
+      }
+    }).catch(err => {
+      console.error('❌ Erro ao enviar email de recuperação:', err);
+    });
+
   } catch (error) {
     console.error('Erro ao solicitar recuperação de senha:', error);
     res.status(500).json({ error: 'Erro ao processar solicitação' });
