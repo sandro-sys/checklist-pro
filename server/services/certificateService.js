@@ -43,14 +43,19 @@ export async function generateCertificateImage(data) {
   // Dimensões da imagem
   const width = 800;
   const padding = 40;
-  const headerHeight = 180;
-  const itemHeight = 50;
-  const footerHeight = 120;
+  const headerHeight = 220; // Header com badge e título
+  const itemHeight = 45; // Altura de cada item
+  const cardInfoHeight = 140; // Info do checklist dentro do card (título, empresa, data, etc)
+  const resultCardsHeight = 100; // Cards de resultado (Concluídos, N/A, Conformidade)
+  const progressBarHeight = 60; // Barra de progresso + texto
+  const footerHeight = 60; // Rodapé
   
   // Calcular altura dinâmica baseada nos itens
   const itemsToShow = items.slice(0, 15); // Limitar a 15 itens na imagem
-  const itemsHeight = itemsToShow.length * itemHeight + 60;
-  const height = headerHeight + itemsHeight + footerHeight + 100;
+  const itemsHeight = itemsToShow.length * itemHeight + 40; // Items + label "ITENS"
+  const moreItemsHeight = items.length > 15 ? 30 : 0; // Texto "+ X itens adicionais"
+  
+  const height = headerHeight + cardInfoHeight + itemsHeight + moreItemsHeight + resultCardsHeight + progressBarHeight + footerHeight + padding * 2;
 
   const canvas = createCanvas(width, height);
   const ctx = canvas.getContext('2d');
@@ -130,7 +135,7 @@ export async function generateCertificateImage(data) {
   const cardX = padding;
   const cardY = y;
   const cardWidth = width - padding * 2;
-  const cardHeight = itemsHeight + 140;
+  const cardHeight = cardInfoHeight + itemsHeight + moreItemsHeight;
 
   // Card background
   ctx.fillStyle = COLORS.cardBg;
@@ -196,7 +201,7 @@ export async function generateCertificateImage(data) {
     
     // Ícone de status
     const iconX = infoX + 12;
-    const iconY = itemY + 12;
+    const iconY = itemY + 10;
     
     if (item.is_checked) {
       // Checkmark verde
@@ -239,19 +244,22 @@ export async function generateCertificateImage(data) {
     ctx.fillStyle = item.is_not_applicable ? COLORS.textDark : COLORS.textLight;
     ctx.textAlign = 'left';
     const itemText = truncateText(ctx, item.title, cardWidth - 100);
-    ctx.fillText(itemText, infoX + 35, itemY + 16);
+    ctx.fillText(itemText, infoX + 35, itemY + 14);
 
     // Badge de status
     if (item.is_required && !item.is_checked && !item.is_not_applicable) {
       ctx.font = '10px Arial, sans-serif';
       ctx.fillStyle = COLORS.danger;
-      ctx.fillText('OBRIGATÓRIO', cardX + cardWidth - 90, itemY + 16);
+      ctx.fillText('OBRIGATÓRIO', cardX + cardWidth - 90, itemY + 14);
     }
   });
 
+  // Atualiza Y após os itens
+  y = y + itemsToShow.length * itemHeight;
+
   // Se há mais itens
   if (items.length > 15) {
-    y = y + itemsToShow.length * itemHeight + 10;
+    y += 10;
     ctx.font = '12px Arial, sans-serif';
     ctx.fillStyle = COLORS.textMuted;
     ctx.textAlign = 'center';
@@ -259,7 +267,7 @@ export async function generateCertificateImage(data) {
   }
 
   // ============ RESULTADO/FOOTER ============
-  y = cardY + cardHeight + 30;
+  y = cardY + cardHeight + 25;
 
   // Card de resultado
   const resultCardWidth = (cardWidth - 20) / 3;
@@ -277,15 +285,15 @@ export async function generateCertificateImage(data) {
   drawResultCard(ctx, cardX + (resultCardWidth + 10) * 2, y, resultCardWidth, resultCardHeight,
     `${completionRate}%`, 'Conformidade', COLORS.primary);
 
-  y += resultCardHeight + 30;
+  y += resultCardHeight + 20;
 
   // Barra de progresso
   const progressBarWidth = cardWidth;
-  const progressBarHeight = 12;
+  const progressBarH = 12;
   
   // Background da barra
   ctx.fillStyle = COLORS.border;
-  roundRect(ctx, cardX, y, progressBarWidth, progressBarHeight, 6);
+  roundRect(ctx, cardX, y, progressBarWidth, progressBarH, 6);
   ctx.fill();
 
   // Progresso
@@ -295,11 +303,11 @@ export async function generateCertificateImage(data) {
     progressGradient.addColorStop(0, COLORS.primary);
     progressGradient.addColorStop(1, COLORS.accent);
     ctx.fillStyle = progressGradient;
-    roundRect(ctx, cardX, y, progressWidth, progressBarHeight, 6);
+    roundRect(ctx, cardX, y, progressWidth, progressBarH, 6);
     ctx.fill();
   }
 
-  y += progressBarHeight + 20;
+  y += progressBarH + 15;
 
   // Texto de resumo
   ctx.font = '12px Arial, sans-serif';
