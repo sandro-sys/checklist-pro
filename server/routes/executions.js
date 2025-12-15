@@ -2,6 +2,8 @@ import express from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { dbRunAsync, dbGetAsync, dbAllAsync } from '../database/init.js';
 import { authenticateToken } from '../middleware/auth.js';
+import { generateCertificateImage } from '../services/certificateService.js';
+import { sendChecklistCertificate } from '../services/emailService.js';
 
 const router = express.Router();
 
@@ -231,6 +233,227 @@ router.get('/checklist/:checklistId', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Erro ao listar execuções:', error);
     res.status(500).json({ error: 'Erro ao listar execuções' });
+  }
+});
+
+// Gerar imagem do comprovante
+router.get('/:executionId/certificate', authenticateToken, async (req, res) => {
+  try {
+    const { executionId } = req.params;
+
+    // Buscar execução com dados completos
+    const execution = await dbGetAsync(`
+      SELECT e.*, 
+             c.title as checklist_title,
+             c.description as checklist_description,
+             u.name as executed_by_name,
+             u.email as executed_by_email,
+             comp.name as company_name
+      FROM checklist_executions e
+      LEFT JOIN checklists c ON e.checklist_id = c.id
+      LEFT JOIN users u ON e.executed_by = u.id
+      LEFT JOIN companies comp ON c.company_id = comp.id
+      WHERE e.id = ?
+    `, [executionId]);
+
+    if (!execution) {
+      return res.status(404).json({ error: 'Execução não encontrada' });
+    }
+
+    // Buscar itens do checklist com respostas
+    const items = await dbAllAsync(`
+      SELECT ci.id, ci.title, ci.description, ci.is_required,
+             COALESCE(er.is_checked, 0) as is_checked,
+             COALESCE(er.is_not_applicable, 0) as is_not_applicable
+      FROM checklist_items ci
+      LEFT JOIN execution_responses er ON ci.id = er.item_id AND er.execution_id = ?
+      WHERE ci.checklist_id = ?
+      ORDER BY ci.order_index
+    `, [executionId, execution.checklist_id]);
+
+    const totalItems = items.length;
+    const checkedItems = items.filter(i => i.is_checked).length;
+    const notApplicableItems = items.filter(i => i.is_not_applicable).length;
+    const completionRate = totalItems > 0 
+      ? Math.round(((checkedItems + notApplicableItems) / totalItems) * 100)
+      : 0;
+
+    // Gerar imagem
+    const imageBuffer = await generateCertificateImage({
+      checklistTitle: execution.checklist_title,
+      companyName: execution.company_name,
+      executedBy: execution.executed_by_name,
+      executedAt: execution.completed_at || execution.executed_at,
+      items,
+      totalItems,
+      checkedItems,
+      notApplicableItems,
+      completionRate
+    });
+
+    res.set({
+      'Content-Type': 'image/png',
+      'Content-Disposition': `attachment; filename="checklist-${executionId}.png"`
+    });
+    res.send(imageBuffer);
+
+  } catch (error) {
+    console.error('Erro ao gerar certificado:', error);
+    res.status(500).json({ error: 'Erro ao gerar certificado' });
+  }
+});
+
+// Enviar comprovante por email
+router.post('/:executionId/share/email', authenticateToken, async (req, res) => {
+  try {
+    const { executionId } = req.params;
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ error: 'Email é obrigatório' });
+    }
+
+    // Buscar execução com dados completos
+    const execution = await dbGetAsync(`
+      SELECT e.*, 
+             c.title as checklist_title,
+             u.name as executed_by_name,
+             comp.name as company_name
+      FROM checklist_executions e
+      LEFT JOIN checklists c ON e.checklist_id = c.id
+      LEFT JOIN users u ON e.executed_by = u.id
+      LEFT JOIN companies comp ON c.company_id = comp.id
+      WHERE e.id = ?
+    `, [executionId]);
+
+    if (!execution) {
+      return res.status(404).json({ error: 'Execução não encontrada' });
+    }
+
+    // Buscar itens do checklist com respostas
+    const items = await dbAllAsync(`
+      SELECT ci.id, ci.title, ci.is_required,
+             COALESCE(er.is_checked, 0) as is_checked,
+             COALESCE(er.is_not_applicable, 0) as is_not_applicable
+      FROM checklist_items ci
+      LEFT JOIN execution_responses er ON ci.id = er.item_id AND er.execution_id = ?
+      WHERE ci.checklist_id = ?
+      ORDER BY ci.order_index
+    `, [executionId, execution.checklist_id]);
+
+    const totalItems = items.length;
+    const checkedItems = items.filter(i => i.is_checked).length;
+    const notApplicableItems = items.filter(i => i.is_not_applicable).length;
+    const completionRate = totalItems > 0 
+      ? Math.round(((checkedItems + notApplicableItems) / totalItems) * 100)
+      : 0;
+
+    // Gerar imagem
+    const imageBuffer = await generateCertificateImage({
+      checklistTitle: execution.checklist_title,
+      companyName: execution.company_name,
+      executedBy: execution.executed_by_name,
+      executedAt: execution.completed_at || execution.executed_at,
+      items,
+      totalItems,
+      checkedItems,
+      notApplicableItems,
+      completionRate
+    });
+
+    // Enviar email
+    const result = await sendChecklistCertificate(email, {
+      userName: execution.executed_by_name,
+      checklistTitle: execution.checklist_title,
+      companyName: execution.company_name,
+      executedAt: execution.completed_at || execution.executed_at,
+      completionRate
+    }, imageBuffer);
+
+    if (result.success) {
+      res.json({ message: 'Comprovante enviado por email com sucesso' });
+    } else {
+      res.status(500).json({ error: 'Erro ao enviar email' });
+    }
+
+  } catch (error) {
+    console.error('Erro ao enviar comprovante por email:', error);
+    res.status(500).json({ error: 'Erro ao enviar comprovante' });
+  }
+});
+
+// Obter dados para compartilhamento (imagem em base64)
+router.get('/:executionId/share', authenticateToken, async (req, res) => {
+  try {
+    const { executionId } = req.params;
+
+    // Buscar execução com dados completos
+    const execution = await dbGetAsync(`
+      SELECT e.*, 
+             c.title as checklist_title,
+             u.name as executed_by_name,
+             comp.name as company_name
+      FROM checklist_executions e
+      LEFT JOIN checklists c ON e.checklist_id = c.id
+      LEFT JOIN users u ON e.executed_by = u.id
+      LEFT JOIN companies comp ON c.company_id = comp.id
+      WHERE e.id = ?
+    `, [executionId]);
+
+    if (!execution) {
+      return res.status(404).json({ error: 'Execução não encontrada' });
+    }
+
+    // Buscar itens do checklist com respostas
+    const items = await dbAllAsync(`
+      SELECT ci.id, ci.title, ci.is_required,
+             COALESCE(er.is_checked, 0) as is_checked,
+             COALESCE(er.is_not_applicable, 0) as is_not_applicable
+      FROM checklist_items ci
+      LEFT JOIN execution_responses er ON ci.id = er.item_id AND er.execution_id = ?
+      WHERE ci.checklist_id = ?
+      ORDER BY ci.order_index
+    `, [executionId, execution.checklist_id]);
+
+    const totalItems = items.length;
+    const checkedItems = items.filter(i => i.is_checked).length;
+    const notApplicableItems = items.filter(i => i.is_not_applicable).length;
+    const completionRate = totalItems > 0 
+      ? Math.round(((checkedItems + notApplicableItems) / totalItems) * 100)
+      : 0;
+
+    // Gerar imagem
+    const imageBuffer = await generateCertificateImage({
+      checklistTitle: execution.checklist_title,
+      companyName: execution.company_name,
+      executedBy: execution.executed_by_name,
+      executedAt: execution.completed_at || execution.executed_at,
+      items,
+      totalItems,
+      checkedItems,
+      notApplicableItems,
+      completionRate
+    });
+
+    // Retornar como base64 para uso no frontend
+    const base64Image = imageBuffer.toString('base64');
+
+    res.json({
+      image: `data:image/png;base64,${base64Image}`,
+      filename: `checklist-${execution.checklist_title.replace(/[^a-zA-Z0-9]/g, '-')}-${Date.now()}.png`,
+      execution: {
+        id: executionId,
+        checklistTitle: execution.checklist_title,
+        companyName: execution.company_name,
+        executedBy: execution.executed_by_name,
+        executedAt: execution.completed_at || execution.executed_at,
+        completionRate
+      }
+    });
+
+  } catch (error) {
+    console.error('Erro ao obter dados de compartilhamento:', error);
+    res.status(500).json({ error: 'Erro ao obter dados de compartilhamento' });
   }
 });
 

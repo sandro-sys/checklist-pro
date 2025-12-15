@@ -370,6 +370,60 @@ export const sendSubscriptionCancelled = async (to, data) => {
   return sendEmail(to, 'Assinatura Cancelada - CheckList Pro', html);
 };
 
+// Email de comprovante de checklist concluido
+export const sendChecklistCertificate = async (to, data, imageBuffer) => {
+  const { userName, checklistTitle, companyName, executedAt, completionRate } = data;
+  
+  const formattedDate = new Date(executedAt).toLocaleDateString('pt-BR', {
+    day: '2-digit',
+    month: 'long',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+
+  const html = baseTemplate(`
+    <div class="header" style="background: linear-gradient(135deg, #6366f1 0%, #2dd4bf 100%);">
+      <h1>CheckList Pro</h1>
+      <p>Checklist Concluido!</p>
+    </div>
+    <div class="content">
+      <h2>Ola, ${userName}!</h2>
+      <p>O checklist foi concluido com sucesso. Segue em anexo o comprovante.</p>
+      
+      <div class="highlight-box" style="background-color: #eef2ff; border-left-color: #6366f1;">
+        <strong>${checklistTitle}</strong><br>
+        Taxa de conformidade: <strong>${completionRate}%</strong>
+      </div>
+      
+      <table class="details-table">
+        <tr>
+          <td>Empresa</td>
+          <td>${companyName}</td>
+        </tr>
+        <tr>
+          <td>Checklist</td>
+          <td>${checklistTitle}</td>
+        </tr>
+        <tr>
+          <td>Data de execucao</td>
+          <td>${formattedDate}</td>
+        </tr>
+        <tr>
+          <td>Conformidade</td>
+          <td>${completionRate}%</td>
+        </tr>
+      </table>
+      
+      <p style="color: #6b7280; font-size: 14px; margin-top: 30px;">
+        O comprovante visual esta anexado a este email.
+      </p>
+    </div>
+  `);
+
+  return sendEmailWithAttachment(to, `Checklist Concluido: ${checklistTitle}`, html, imageBuffer, `checklist-${Date.now()}.png`);
+};
+
 // Funcao principal de envio
 const sendEmail = async (to, subject, html) => {
   const mailOptions = {
@@ -396,10 +450,45 @@ const sendEmail = async (to, subject, html) => {
   }
 };
 
+// Funcao de envio com anexo
+const sendEmailWithAttachment = async (to, subject, html, imageBuffer, filename) => {
+  const mailOptions = {
+    from: process.env.EMAIL_FROM || '"CheckList Pro" <noreply@checklist-pro.rhumarh.com>',
+    to,
+    subject,
+    html,
+    attachments: [
+      {
+        filename,
+        content: imageBuffer,
+        contentType: 'image/png'
+      }
+    ]
+  };
+
+  if (!transporter) {
+    console.log('📧 [DEV] Email com anexo que seria enviado:');
+    console.log(`   Para: ${to}`);
+    console.log(`   Assunto: ${subject}`);
+    console.log(`   Anexo: ${filename}`);
+    return { success: true, mode: 'development' };
+  }
+
+  try {
+    const info = await transporter.sendMail(mailOptions);
+    console.log('📧 Email com anexo enviado:', info.messageId);
+    return { success: true, messageId: info.messageId };
+  } catch (error) {
+    console.error('❌ Erro ao enviar email com anexo:', error);
+    return { success: false, error: error.message };
+  }
+};
+
 export default {
   sendSubscriptionConfirmation,
   sendPaymentReceived,
   sendTrialActivated,
-  sendSubscriptionCancelled
+  sendSubscriptionCancelled,
+  sendChecklistCertificate
 };
 
