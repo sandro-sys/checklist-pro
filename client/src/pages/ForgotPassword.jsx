@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { Mail, ArrowLeft, Loader2, CheckCircle } from 'lucide-react'
 import toast from 'react-hot-toast'
-import api from '../lib/api'
+import api from '../services/api'
 
 export default function ForgotPassword() {
   const [email, setEmail] = useState('')
