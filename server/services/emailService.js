@@ -370,6 +370,45 @@ export const sendSubscriptionCancelled = async (to, data) => {
   return sendEmail(to, 'Assinatura Cancelada - CheckList Pro', html);
 };
 
+// Email de recuperacao de senha
+export const sendPasswordReset = async (to, data) => {
+  const { userName, resetLink, expiresIn } = data;
+
+  const html = baseTemplate(`
+    <div class="header" style="background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);">
+      <h1>CheckList Pro</h1>
+      <p>Recuperacao de Senha</p>
+    </div>
+    <div class="content">
+      <h2>Ola, ${userName}!</h2>
+      <p>Recebemos uma solicitacao para redefinir sua senha.</p>
+      
+      <div class="highlight-box" style="background-color: #fef2f2; border-left-color: #ef4444;">
+        <strong>Atencao:</strong> Este link expira em <strong>${expiresIn}</strong>.
+      </div>
+      
+      <p>Clique no botao abaixo para criar uma nova senha:</p>
+      
+      <center>
+        <a href="${resetLink}" class="button" style="background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);">
+          Redefinir Senha
+        </a>
+      </center>
+      
+      <p style="color: #6b7280; font-size: 14px; margin-top: 30px;">
+        Se voce nao solicitou a recuperacao de senha, ignore este email. Sua senha permanecera a mesma.
+      </p>
+      
+      <p style="color: #9ca3af; font-size: 12px; margin-top: 20px;">
+        Se o botao nao funcionar, copie e cole este link no seu navegador:<br>
+        <a href="${resetLink}" style="color: #ef4444; word-break: break-all;">${resetLink}</a>
+      </p>
+    </div>
+  `);
+
+  return sendEmail(to, 'Recuperacao de Senha - CheckList Pro', html);
+};
+
 // Email de comprovante de checklist concluido
 export const sendChecklistCertificate = async (to, data, imageBuffer) => {
   const { userName, checklistTitle, companyName, executedAt, completionRate } = data;
@@ -489,6 +528,7 @@ export default {
   sendPaymentReceived,
   sendTrialActivated,
   sendSubscriptionCancelled,
-  sendChecklistCertificate
+  sendChecklistCertificate,
+  sendPasswordReset
 };
 

@@ -246,6 +246,17 @@ async function initPostgres() {
     )
   `);
 
+  await pgPool.query(`
+    CREATE TABLE IF NOT EXISTS password_reset_tokens (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      token TEXT NOT NULL,
+      expires_at TIMESTAMP NOT NULL,
+      used_at TIMESTAMP,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
   console.log('✅ Tabelas PostgreSQL criadas com sucesso!');
 }
 
@@ -448,6 +459,17 @@ async function initSQLite() {
       status TEXT,
       payment_method TEXT,
       paid_at TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS password_reset_tokens (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      token TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      used_at TEXT,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP
     )
   `);

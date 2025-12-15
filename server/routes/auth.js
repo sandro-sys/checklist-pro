@@ -1,10 +1,12 @@
 import express from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import crypto from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
 import validator from 'validator';
 import { dbRunAsync, dbGetAsync, dbAllAsync } from '../database/init.js';
 import { authenticateToken } from '../middleware/auth.js';
+import { sendPasswordReset } from '../services/emailService.js';
 
 const router = express.Router();
 
@@ -268,6 +270,163 @@ router.post('/force-password-change-all', authenticateToken, async (req, res) =>
   } catch (error) {
     console.error('Erro ao forçar troca de senha:', error);
     res.status(500).json({ error: 'Erro ao processar solicitação' });
+  }
+});
+
+// Solicitar recuperacao de senha
+router.post('/forgot-password', async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ error: 'Email é obrigatório' });
+    }
+
+    if (!validator.isEmail(email)) {
+      return res.status(400).json({ error: 'Email inválido' });
+    }
+
+    // Buscar usuario pelo email
+    const user = await dbGetAsync('SELECT id, name, email FROM users WHERE email = ?', [email.toLowerCase()]);
+
+    // Sempre retornar sucesso para evitar enumeration attack
+    if (!user) {
+      return res.json({ 
+        message: 'Se o email estiver cadastrado, você receberá um link para recuperação de senha.' 
+      });
+    }
+
+    // Invalidar tokens anteriores do usuario
+    await dbRunAsync('DELETE FROM password_reset_tokens WHERE user_id = ?', [user.id]);
+
+    // Gerar token seguro
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    const tokenId = uuidv4();
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString(); // 1 hora
+
+    // Salvar token no banco
+    await dbRunAsync(`
+      INSERT INTO password_reset_tokens (id, user_id, token, expires_at)
+      VALUES (?, ?, ?, ?)
+    `, [tokenId, user.id, resetToken, expiresAt]);
+
+    // Gerar link de recuperacao
+    const baseUrl = process.env.FRONTEND_URL || 'https://checklist-pro.rhumarh.com';
+    const resetLink = `${baseUrl}/reset-password?token=${resetToken}`;
+
+    // Enviar email
+    await sendPasswordReset(user.email, {
+      userName: user.name,
+      resetLink,
+      expiresIn: '1 hora'
+    });
+
+    // Log de auditoria
+    await dbRunAsync(`
+      INSERT INTO audit_logs (id, user_id, action, entity_type, entity_id, details)
+      VALUES (?, ?, 'PASSWORD_RESET_REQUEST', 'user', ?, ?)
+    `, [uuidv4(), user.id, user.id, JSON.stringify({ action: 'password_reset_requested' })]);
+
+    res.json({ 
+      message: 'Se o email estiver cadastrado, você receberá um link para recuperação de senha.' 
+    });
+  } catch (error) {
+    console.error('Erro ao solicitar recuperação de senha:', error);
+    res.status(500).json({ error: 'Erro ao processar solicitação' });
+  }
+});
+
+// Redefinir senha com token
+router.post('/reset-password', async (req, res) => {
+  try {
+    const { token, newPassword } = req.body;
+
+    if (!token || !newPassword) {
+      return res.status(400).json({ error: 'Token e nova senha são obrigatórios' });
+    }
+
+    // Validar nova senha forte
+    const passwordValidation = validateStrongPassword(newPassword);
+    if (!passwordValidation.isValid) {
+      return res.status(400).json({ 
+        error: 'Senha fraca. Requisitos: ' + passwordValidation.errors.join(', ')
+      });
+    }
+
+    // Buscar token valido
+    const resetToken = await dbGetAsync(`
+      SELECT * FROM password_reset_tokens 
+      WHERE token = ? AND used_at IS NULL AND expires_at > ?
+    `, [token, new Date().toISOString()]);
+
+    if (!resetToken) {
+      return res.status(400).json({ error: 'Link inválido ou expirado. Solicite uma nova recuperação de senha.' });
+    }
+
+    // Buscar usuario
+    const user = await dbGetAsync('SELECT * FROM users WHERE id = ?', [resetToken.user_id]);
+    if (!user) {
+      return res.status(404).json({ error: 'Usuário não encontrado' });
+    }
+
+    // Hash da nova senha
+    const hashedPassword = await bcrypt.hash(newPassword, 12);
+
+    // Atualizar senha
+    await dbRunAsync(`
+      UPDATE users SET password = ?, must_change_password = 0, updated_at = ?
+      WHERE id = ?
+    `, [hashedPassword, new Date().toISOString(), user.id]);
+
+    // Marcar token como usado
+    await dbRunAsync(`
+      UPDATE password_reset_tokens SET used_at = ? WHERE id = ?
+    `, [new Date().toISOString(), resetToken.id]);
+
+    // Invalidar todos os refresh tokens do usuario (forcar novo login)
+    await dbRunAsync('DELETE FROM refresh_tokens WHERE user_id = ?', [user.id]);
+
+    // Log de auditoria
+    await dbRunAsync(`
+      INSERT INTO audit_logs (id, user_id, action, entity_type, entity_id, details)
+      VALUES (?, ?, 'PASSWORD_RESET_COMPLETE', 'user', ?, ?)
+    `, [uuidv4(), user.id, user.id, JSON.stringify({ action: 'password_reset_completed' })]);
+
+    res.json({ message: 'Senha alterada com sucesso! Faça login com sua nova senha.' });
+  } catch (error) {
+    console.error('Erro ao redefinir senha:', error);
+    res.status(500).json({ error: 'Erro ao redefinir senha' });
+  }
+});
+
+// Verificar se token de reset e valido
+router.get('/verify-reset-token', async (req, res) => {
+  try {
+    const { token } = req.query;
+
+    if (!token) {
+      return res.status(400).json({ valid: false, error: 'Token não fornecido' });
+    }
+
+    const resetToken = await dbGetAsync(`
+      SELECT pt.*, u.email, u.name 
+      FROM password_reset_tokens pt
+      JOIN users u ON pt.user_id = u.id
+      WHERE pt.token = ? AND pt.used_at IS NULL AND pt.expires_at > ?
+    `, [token, new Date().toISOString()]);
+
+    if (!resetToken) {
+      return res.json({ valid: false, error: 'Link inválido ou expirado' });
+    }
+
+    res.json({ 
+      valid: true, 
+      email: resetToken.email,
+      name: resetToken.name
+    });
+  } catch (error) {
+    console.error('Erro ao verificar token:', error);
+    res.status(500).json({ valid: false, error: 'Erro ao verificar token' });
   }
 });
 

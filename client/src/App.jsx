@@ -8,6 +8,8 @@ import AuthLayout from './layouts/AuthLayout'
 // Pages
 import Login from './pages/Login'
 import Register from './pages/Register'
+import ForgotPassword from './pages/ForgotPassword'
+import ResetPassword from './pages/ResetPassword'
 import Dashboard from './pages/Dashboard'
 import Checklists from './pages/Checklists'
 import ChecklistCreate from './pages/ChecklistCreate'
@@ -83,6 +85,16 @@ function App() {
         <Route path="/register" element={
           <PublicRoute>
             <Register />
+          </PublicRoute>
+        } />
+        <Route path="/forgot-password" element={
+          <PublicRoute>
+            <ForgotPassword />
+          </PublicRoute>
+        } />
+        <Route path="/reset-password" element={
+          <PublicRoute>
+            <ResetPassword />
           </PublicRoute>
         } />
       </Route>
