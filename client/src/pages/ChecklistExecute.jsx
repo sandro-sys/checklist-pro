@@ -245,7 +245,7 @@ export default function ChecklistExecute() {
   const handleShareWhatsApp = async () => {
     if (!shareData) return
 
-    // Usar Web Share API se disponível
+    // Tentar usar Web Share API com arquivo (funciona em dispositivos móveis modernos)
     if (navigator.share && navigator.canShare) {
       try {
         // Converter base64 para blob
@@ -257,25 +257,46 @@ export default function ChecklistExecute() {
           await navigator.share({
             files: [file],
             title: `Checklist: ${shareData.execution.checklistTitle}`,
-            text: `Checklist "${shareData.execution.checklistTitle}" concluído com ${shareData.execution.completionRate}% de conformidade.`
+            text: `✅ Checklist "${shareData.execution.checklistTitle}" concluído!\n📊 Conformidade: ${shareData.execution.completionRate}%`
           })
+          toast.success('Compartilhado com sucesso!')
           return
         }
       } catch (error) {
-        console.log('Web Share API não suportada ou cancelada')
+        if (error.name === 'AbortError') {
+          return // Usuário cancelou
+        }
+        console.log('Web Share API falhou, tentando alternativa...')
       }
     }
 
-    // Fallback: abrir WhatsApp Web com texto
-    const text = encodeURIComponent(
-      `Checklist "${shareData.execution.checklistTitle}" concluído!\n` +
-      `Empresa: ${shareData.execution.companyName}\n` +
-      `Executado por: ${shareData.execution.executedBy}\n` +
-      `Conformidade: ${shareData.execution.completionRate}%\n\n` +
-      `Baixe a imagem do comprovante no CheckList App.`
-    )
-    window.open(`https://wa.me/?text=${text}`, '_blank')
-    toast.success('Abrindo WhatsApp...')
+    // Alternativa: baixar imagem primeiro e depois abrir WhatsApp
+    try {
+      // Baixar a imagem automaticamente
+      const link = document.createElement('a')
+      link.href = shareData.image
+      link.download = shareData.filename
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+
+      // Aguardar um pouco para o download iniciar
+      await new Promise(resolve => setTimeout(resolve, 500))
+
+      // Abrir WhatsApp com texto
+      const text = encodeURIComponent(
+        `✅ *Checklist "${shareData.execution.checklistTitle}" concluído!*\n\n` +
+        `🏢 Empresa: ${shareData.execution.companyName}\n` +
+        `👤 Executado por: ${shareData.execution.executedBy}\n` +
+        `📊 Conformidade: ${shareData.execution.completionRate}%\n\n` +
+        `📎 _Anexe a imagem que foi baixada para enviar o comprovante._`
+      )
+      window.open(`https://wa.me/?text=${text}`, '_blank')
+      
+      toast.success('Imagem baixada! Anexe no WhatsApp.')
+    } catch (error) {
+      toast.error('Erro ao compartilhar')
+    }
   }
 
   if (isLoading) {
