@@ -15,6 +15,7 @@ import qrcodeRoutes from './routes/qrcode.js';
 import usersRoutes from './routes/users.js';
 import rolesRoutes from './routes/roles.js';
 import paymentsRoutes from './routes/payments.js';
+import uploadsRoutes from './routes/uploads.js';
 
 // Database
 import { initDatabase, dbRunAsync } from './database/init.js';
@@ -68,6 +69,9 @@ app.use('/api/', limiter);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
+// Servir arquivos de upload
+app.use('/uploads', express.static(join(__dirname, '../uploads')));
+
 // API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/companies', companyRoutes);
@@ -77,6 +81,7 @@ app.use('/api/qrcode', qrcodeRoutes);
 app.use('/api/users', usersRoutes);
 app.use('/api/roles', rolesRoutes);
 app.use('/api/payments', paymentsRoutes);
+app.use('/api/uploads', uploadsRoutes);
 
 // Health check (tambem usado pelo cron para manter servidor acordado)
 app.get('/api/health', (req, res) => {

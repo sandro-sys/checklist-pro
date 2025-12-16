@@ -173,10 +173,24 @@ async function initPostgres() {
       response TEXT,
       is_checked INTEGER DEFAULT 0,
       is_not_applicable INTEGER DEFAULT 0,
+      is_not_executed INTEGER DEFAULT 0,
+      image_url TEXT,
+      text_response TEXT,
       notes TEXT,
       responded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `);
+
+  // Migracao: adicionar novos campos em execution_responses
+  try {
+    await pgPool.query(`ALTER TABLE execution_responses ADD COLUMN is_not_executed INTEGER DEFAULT 0`);
+  } catch (e) {}
+  try {
+    await pgPool.query(`ALTER TABLE execution_responses ADD COLUMN image_url TEXT`);
+  } catch (e) {}
+  try {
+    await pgPool.query(`ALTER TABLE execution_responses ADD COLUMN text_response TEXT`);
+  } catch (e) {}
 
   await pgPool.query(`
     CREATE TABLE IF NOT EXISTS audit_logs (
@@ -404,10 +418,24 @@ async function initSQLite() {
       response TEXT,
       is_checked INTEGER DEFAULT 0,
       is_not_applicable INTEGER DEFAULT 0,
+      is_not_executed INTEGER DEFAULT 0,
+      image_url TEXT,
+      text_response TEXT,
       notes TEXT,
       responded_at TEXT DEFAULT CURRENT_TIMESTAMP
     )
   `);
+
+  // Migracao: adicionar novos campos em execution_responses
+  try {
+    db.run(`ALTER TABLE execution_responses ADD COLUMN is_not_executed INTEGER DEFAULT 0`);
+  } catch (e) {}
+  try {
+    db.run(`ALTER TABLE execution_responses ADD COLUMN image_url TEXT`);
+  } catch (e) {}
+  try {
+    db.run(`ALTER TABLE execution_responses ADD COLUMN text_response TEXT`);
+  } catch (e) {}
 
   db.run(`
     CREATE TABLE IF NOT EXISTS audit_logs (

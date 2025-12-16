@@ -13,7 +13,11 @@ import {
   Calendar,
   ChevronDown,
   Building2,
-  ArrowRight
+  ArrowRight,
+  Camera,
+  FileText,
+  CheckSquare,
+  AlertCircle
 } from 'lucide-react'
 import api from '../services/api'
 import { useAuthStore } from '../store/authStore'
@@ -26,6 +30,14 @@ const PERIODICITY_OPTIONS = [
   { value: 'shift', label: 'Por Turno' },
   { value: 'custom', label: 'Personalizado' }
 ]
+
+const ITEM_TYPE_OPTIONS = [
+  { value: 'checkbox', label: 'Checkbox', icon: CheckSquare, description: 'Item padrão para marcar' },
+  { value: 'image', label: 'Foto', icon: Camera, description: 'Exige upload de imagem' },
+  { value: 'text', label: 'Dissertativo', icon: FileText, description: 'Resposta em texto (até 30 palavras)' }
+]
+
+const MAX_IMAGE_ITEMS = 2
 
 // Categorias padrão caso não tenha empresa
 const DEFAULT_CATEGORIES = [
@@ -120,7 +132,8 @@ export default function ChecklistCreate() {
           id: `item-${index}`,
           title: item.title,
           description: item.description || '',
-          is_required: item.is_required
+          is_required: item.is_required,
+          item_type: item.item_type || 'checkbox'
         }))
       })
       setShowTemplates(false)
@@ -148,7 +161,16 @@ export default function ChecklistCreate() {
     }
   }
 
-  const addItem = () => {
+  const addItem = (itemType = 'checkbox') => {
+    // Verificar limite de itens com imagem
+    if (itemType === 'image') {
+      const imageItemsCount = formData.items.filter(i => i.item_type === 'image').length
+      if (imageItemsCount >= MAX_IMAGE_ITEMS) {
+        toast.error(`Limite de ${MAX_IMAGE_ITEMS} itens com foto atingido`)
+        return
+      }
+    }
+
     setFormData(prev => ({
       ...prev,
       items: [
@@ -157,11 +179,16 @@ export default function ChecklistCreate() {
           id: `item-${Date.now()}`,
           title: '',
           description: '',
-          is_required: true
+          is_required: true,
+          item_type: itemType
         }
       ]
     }))
   }
+
+  // Contar itens por tipo
+  const imageItemsCount = formData.items.filter(i => i.item_type === 'image').length
+  const canAddImageItem = imageItemsCount < MAX_IMAGE_ITEMS
 
   const updateItem = (index, field, value) => {
     setFormData(prev => ({
@@ -418,75 +445,169 @@ export default function ChecklistCreate() {
         {/* Items */}
         <div className="bg-dark-800/50 backdrop-blur-sm border border-dark-700/50 rounded-2xl p-6">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-white">
-              Itens do Checklist ({formData.items.length})
-            </h2>
-            <button
-              type="button"
-              onClick={addItem}
-              className="flex items-center gap-2 px-4 py-2 bg-primary-500/10 text-primary-400 rounded-lg hover:bg-primary-500/20 transition-colors text-sm font-medium"
-            >
-              <Plus className="w-4 h-4" />
-              Adicionar Item
-            </button>
+            <div>
+              <h2 className="text-lg font-semibold text-white">
+                Itens do Checklist ({formData.items.length})
+              </h2>
+              {imageItemsCount > 0 && (
+                <p className="text-xs text-dark-400 mt-1">
+                  <Camera className="w-3 h-3 inline mr-1" />
+                  {imageItemsCount}/{MAX_IMAGE_ITEMS} itens com foto
+                </p>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => addItem('checkbox')}
+                className="flex items-center gap-2 px-3 py-2 bg-primary-500/10 text-primary-400 rounded-lg hover:bg-primary-500/20 transition-colors text-sm font-medium"
+                title="Adicionar item checkbox"
+              >
+                <CheckSquare className="w-4 h-4" />
+                <span className="hidden sm:inline">Checkbox</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => addItem('image')}
+                disabled={!canAddImageItem}
+                className="flex items-center gap-2 px-3 py-2 bg-amber-500/10 text-amber-400 rounded-lg hover:bg-amber-500/20 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                title={canAddImageItem ? 'Adicionar item com foto' : `Limite de ${MAX_IMAGE_ITEMS} fotos atingido`}
+              >
+                <Camera className="w-4 h-4" />
+                <span className="hidden sm:inline">Foto</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => addItem('text')}
+                className="flex items-center gap-2 px-3 py-2 bg-teal-500/10 text-teal-400 rounded-lg hover:bg-teal-500/20 transition-colors text-sm font-medium"
+                title="Adicionar item dissertativo"
+              >
+                <FileText className="w-4 h-4" />
+                <span className="hidden sm:inline">Texto</span>
+              </button>
+            </div>
           </div>
 
           {formData.items.length === 0 ? (
             <div className="text-center py-8 border-2 border-dashed border-dark-600 rounded-xl">
               <p className="text-dark-400 mb-4">Nenhum item adicionado</p>
-              <button
-                type="button"
-                onClick={addItem}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-dark-700 text-white rounded-lg hover:bg-dark-600 transition-colors text-sm"
-              >
-                <Plus className="w-4 h-4" />
-                Adicionar primeiro item
-              </button>
+              <div className="flex flex-wrap justify-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => addItem('checkbox')}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-dark-700 text-white rounded-lg hover:bg-dark-600 transition-colors text-sm"
+                >
+                  <CheckSquare className="w-4 h-4" />
+                  Checkbox
+                </button>
+                <button
+                  type="button"
+                  onClick={() => addItem('image')}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-dark-700 text-amber-400 rounded-lg hover:bg-dark-600 transition-colors text-sm"
+                >
+                  <Camera className="w-4 h-4" />
+                  Com Foto
+                </button>
+                <button
+                  type="button"
+                  onClick={() => addItem('text')}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-dark-700 text-teal-400 rounded-lg hover:bg-dark-600 transition-colors text-sm"
+                >
+                  <FileText className="w-4 h-4" />
+                  Dissertativo
+                </button>
+              </div>
             </div>
           ) : (
             <div className="space-y-3">
-              {formData.items.map((item, index) => (
-                <motion.div
-                  key={item.id}
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  className="flex items-start gap-3 p-4 bg-dark-700/30 rounded-xl group"
-                >
-                  <div className="text-dark-500 cursor-move mt-2">
-                    <GripVertical className="w-5 h-5" />
-                  </div>
-                  
-                  <div className="flex-1 space-y-3">
-                    <input
-                      type="text"
-                      value={item.title}
-                      onChange={(e) => updateItem(index, 'title', e.target.value)}
-                      placeholder="Título do item"
-                      className="w-full px-3 py-2 bg-dark-600/50 border border-dark-500 rounded-lg text-white placeholder-dark-400 focus:border-primary-500 focus:ring-1 focus:ring-primary-500 transition-all text-sm"
-                    />
-                    
-                    <div className="flex items-center gap-4">
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={item.is_required}
-                          onChange={(e) => updateItem(index, 'is_required', e.target.checked)}
-                          className="checkbox-custom w-5 h-5"
-                        />
-                        <span className="text-sm text-dark-400">Obrigatório</span>
-                      </label>
-                    </div>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => removeItem(index)}
-                    className="p-2 text-dark-500 hover:text-rose-400 rounded-lg hover:bg-rose-500/10 transition-colors opacity-0 group-hover:opacity-100"
+              {formData.items.map((item, index) => {
+                const itemType = ITEM_TYPE_OPTIONS.find(t => t.value === (item.item_type || 'checkbox'))
+                const TypeIcon = itemType?.icon || CheckSquare
+                
+                return (
+                  <motion.div
+                    key={item.id}
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    className={`flex items-start gap-3 p-4 rounded-xl group ${
+                      item.item_type === 'image' 
+                        ? 'bg-amber-500/5 border border-amber-500/20' 
+                        : item.item_type === 'text'
+                        ? 'bg-teal-500/5 border border-teal-500/20'
+                        : 'bg-dark-700/30'
+                    }`}
                   >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </motion.div>
-              ))}
+                    <div className="text-dark-500 cursor-move mt-2">
+                      <GripVertical className="w-5 h-5" />
+                    </div>
+                    
+                    {/* Indicador de tipo */}
+                    <div className={`flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center mt-1 ${
+                      item.item_type === 'image'
+                        ? 'bg-amber-500/20 text-amber-400'
+                        : item.item_type === 'text'
+                        ? 'bg-teal-500/20 text-teal-400'
+                        : 'bg-primary-500/20 text-primary-400'
+                    }`}>
+                      <TypeIcon className="w-4 h-4" />
+                    </div>
+                    
+                    <div className="flex-1 space-y-3">
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={item.title}
+                          onChange={(e) => updateItem(index, 'title', e.target.value)}
+                          placeholder={
+                            item.item_type === 'image' 
+                              ? 'Ex: Foto do equipamento' 
+                              : item.item_type === 'text'
+                              ? 'Ex: Observações gerais'
+                              : 'Título do item'
+                          }
+                          className="flex-1 px-3 py-2 bg-dark-600/50 border border-dark-500 rounded-lg text-white placeholder-dark-400 focus:border-primary-500 focus:ring-1 focus:ring-primary-500 transition-all text-sm"
+                        />
+                        <span className={`text-xs px-2 py-1 rounded-full ${
+                          item.item_type === 'image'
+                            ? 'bg-amber-500/20 text-amber-400'
+                            : item.item_type === 'text'
+                            ? 'bg-teal-500/20 text-teal-400'
+                            : 'bg-primary-500/20 text-primary-400'
+                        }`}>
+                          {itemType?.label}
+                        </span>
+                      </div>
+                      
+                      {item.item_type === 'text' && (
+                        <p className="text-xs text-dark-500 flex items-center gap-1">
+                          <AlertCircle className="w-3 h-3" />
+                          Resposta limitada a 30 palavras
+                        </p>
+                      )}
+                      
+                      <div className="flex items-center gap-4">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={item.is_required}
+                            onChange={(e) => updateItem(index, 'is_required', e.target.checked)}
+                            className="checkbox-custom w-5 h-5"
+                          />
+                          <span className="text-sm text-dark-400">Obrigatório</span>
+                        </label>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => removeItem(index)}
+                      className="p-2 text-dark-500 hover:text-rose-400 rounded-lg hover:bg-rose-500/10 transition-colors opacity-0 group-hover:opacity-100"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </motion.div>
+                )
+              })}
             </div>
           )}
         </div>

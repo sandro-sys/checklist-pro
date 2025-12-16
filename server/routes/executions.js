@@ -68,7 +68,7 @@ router.post('/start', authenticateToken, async (req, res) => {
 router.post('/:executionId/responses', authenticateToken, async (req, res) => {
   try {
     const { executionId } = req.params;
-    const { item_id, response, is_checked, is_not_applicable, notes } = req.body;
+    const { item_id, response, is_checked, is_not_applicable, is_not_executed, notes, image_url, text_response } = req.body;
 
     if (!item_id) {
       return res.status(400).json({ error: 'ID do item é obrigatório' });
@@ -89,15 +89,37 @@ router.post('/:executionId/responses', authenticateToken, async (req, res) => {
       // Atualizar resposta existente
       await dbRunAsync(`
         UPDATE execution_responses 
-        SET response = ?, is_checked = ?, is_not_applicable = ?, notes = ?, responded_at = ?
+        SET response = ?, is_checked = ?, is_not_applicable = ?, is_not_executed = ?, 
+            image_url = ?, text_response = ?, notes = ?, responded_at = ?
         WHERE id = ?
-      `, [response || null, is_checked ? 1 : 0, is_not_applicable ? 1 : 0, notes || null, new Date().toISOString(), existingResponse.id]);
+      `, [
+        response || null, 
+        is_checked ? 1 : 0, 
+        is_not_applicable ? 1 : 0, 
+        is_not_executed ? 1 : 0,
+        image_url || null,
+        text_response || null,
+        notes || null, 
+        new Date().toISOString(), 
+        existingResponse.id
+      ]);
     } else {
       // Criar nova resposta
       await dbRunAsync(`
-        INSERT INTO execution_responses (id, execution_id, item_id, response, is_checked, is_not_applicable, notes)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-      `, [uuidv4(), executionId, item_id, response || null, is_checked ? 1 : 0, is_not_applicable ? 1 : 0, notes || null]);
+        INSERT INTO execution_responses (id, execution_id, item_id, response, is_checked, is_not_applicable, is_not_executed, image_url, text_response, notes)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `, [
+        uuidv4(), 
+        executionId, 
+        item_id, 
+        response || null, 
+        is_checked ? 1 : 0, 
+        is_not_applicable ? 1 : 0, 
+        is_not_executed ? 1 : 0,
+        image_url || null,
+        text_response || null,
+        notes || null
+      ]);
     }
 
     res.json({ message: 'Resposta salva com sucesso' });
@@ -125,10 +147,10 @@ router.post('/:executionId/complete', authenticateToken, async (req, res) => {
       WHERE ci.checklist_id = ? AND ci.is_required = 1
     `, [execution.checklist_id]);
 
-    // Buscar respostas marcadas como checked OU como não aplicável
+    // Buscar respostas marcadas como checked OU como não aplicável OU como não executado
     const responses = await dbAllAsync(`
       SELECT item_id FROM execution_responses 
-      WHERE execution_id = ? AND (is_checked = 1 OR is_not_applicable = 1)
+      WHERE execution_id = ? AND (is_checked = 1 OR is_not_applicable = 1 OR is_not_executed = 1)
     `, [executionId]);
 
     const respondedItemIds = responses.map(r => r.item_id);
@@ -794,6 +816,125 @@ router.get('/stats/:companyId/image', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Erro ao gerar imagem do relatório:', error);
     res.status(500).json({ error: 'Erro ao gerar imagem do relatório' });
+  }
+});
+
+// Relatório de questões dissertativas
+router.get('/text-responses/:companyId', authenticateToken, async (req, res) => {
+  try {
+    const { companyId } = req.params;
+    const { period = '30', checklist_id } = req.query;
+
+    const startDate = new Date(Date.now() - parseInt(period) * 24 * 60 * 60 * 1000).toISOString();
+
+    // Buscar respostas dissertativas
+    let query = `
+      SELECT 
+        er.id,
+        er.text_response,
+        er.responded_at,
+        ci.title as item_title,
+        ci.description as item_description,
+        c.title as checklist_title,
+        u.name as executed_by,
+        e.executed_at,
+        e.completed_at
+      FROM execution_responses er
+      JOIN checklist_items ci ON er.item_id = ci.id
+      JOIN checklist_executions e ON er.execution_id = e.id
+      JOIN checklists c ON e.checklist_id = c.id
+      JOIN users u ON e.executed_by = u.id
+      WHERE c.company_id = ? 
+        AND ci.item_type = 'text'
+        AND er.text_response IS NOT NULL 
+        AND er.text_response != ''
+        AND e.executed_at >= ?
+        AND e.status = 'completed'
+    `;
+    
+    const params = [companyId, startDate];
+
+    if (checklist_id) {
+      query += ' AND c.id = ?';
+      params.push(checklist_id);
+    }
+
+    query += ' ORDER BY e.executed_at DESC';
+
+    const textResponses = await dbAllAsync(query, params);
+
+    // Agrupar por checklist
+    const groupedByChecklist = {};
+    textResponses.forEach(resp => {
+      if (!groupedByChecklist[resp.checklist_title]) {
+        groupedByChecklist[resp.checklist_title] = [];
+      }
+      groupedByChecklist[resp.checklist_title].push(resp);
+    });
+
+    res.json({
+      total: textResponses.length,
+      period: parseInt(period),
+      responses: textResponses,
+      grouped: groupedByChecklist
+    });
+  } catch (error) {
+    console.error('Erro ao buscar respostas dissertativas:', error);
+    res.status(500).json({ error: 'Erro ao buscar respostas dissertativas' });
+  }
+});
+
+// Relatório de itens com imagem
+router.get('/image-responses/:companyId', authenticateToken, async (req, res) => {
+  try {
+    const { companyId } = req.params;
+    const { period = '30', checklist_id } = req.query;
+
+    const startDate = new Date(Date.now() - parseInt(period) * 24 * 60 * 60 * 1000).toISOString();
+
+    let query = `
+      SELECT 
+        er.id,
+        er.image_url,
+        er.responded_at,
+        ci.title as item_title,
+        ci.description as item_description,
+        c.title as checklist_title,
+        u.name as executed_by,
+        e.executed_at,
+        e.completed_at
+      FROM execution_responses er
+      JOIN checklist_items ci ON er.item_id = ci.id
+      JOIN checklist_executions e ON er.execution_id = e.id
+      JOIN checklists c ON e.checklist_id = c.id
+      JOIN users u ON e.executed_by = u.id
+      WHERE c.company_id = ? 
+        AND ci.item_type = 'image'
+        AND er.image_url IS NOT NULL 
+        AND er.image_url != ''
+        AND e.executed_at >= ?
+        AND e.status = 'completed'
+    `;
+    
+    const params = [companyId, startDate];
+
+    if (checklist_id) {
+      query += ' AND c.id = ?';
+      params.push(checklist_id);
+    }
+
+    query += ' ORDER BY e.executed_at DESC';
+
+    const imageResponses = await dbAllAsync(query, params);
+
+    res.json({
+      total: imageResponses.length,
+      period: parseInt(period),
+      responses: imageResponses
+    });
+  } catch (error) {
+    console.error('Erro ao buscar respostas com imagem:', error);
+    res.status(500).json({ error: 'Erro ao buscar respostas com imagem' });
   }
 });
 

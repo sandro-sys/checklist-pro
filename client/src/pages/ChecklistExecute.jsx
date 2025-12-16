@@ -23,7 +23,13 @@ import {
   Share2,
   Download,
   X,
-  MessageCircle
+  MessageCircle,
+  Camera,
+  FileText,
+  Upload,
+  Image,
+  XCircle,
+  Clipboard
 } from 'lucide-react'
 import api from '../services/api'
 import { useAuthStore } from '../store/authStore'
@@ -56,6 +62,9 @@ export default function ChecklistExecute() {
   const [isSendingEmail, setIsSendingEmail] = useState(false)
   const [completedExecutionId, setCompletedExecutionId] = useState(null)
 
+  // Upload state
+  const [uploadingItemId, setUploadingItemId] = useState(null)
+
   useEffect(() => {
     fetchChecklist()
   }, [checklistId])
@@ -68,7 +77,14 @@ export default function ChecklistExecute() {
       // Initialize responses
       const initialResponses = {}
       response.data.items.forEach(item => {
-        initialResponses[item.id] = { is_checked: false, is_not_applicable: false, notes: '' }
+        initialResponses[item.id] = { 
+          is_checked: false, 
+          is_not_applicable: false, 
+          is_not_executed: false,
+          notes: '',
+          image_url: '',
+          text_response: ''
+        }
       })
       setResponses(initialResponses)
     } catch (error) {
@@ -147,14 +163,15 @@ export default function ChecklistExecute() {
     const newValue = !responses[itemId]?.is_not_applicable
     setResponses(prev => ({
       ...prev,
-      [itemId]: { ...prev[itemId], is_not_applicable: newValue, is_checked: false }
+      [itemId]: { ...prev[itemId], is_not_applicable: newValue, is_checked: false, is_not_executed: false }
     }))
 
     try {
       await api.post(`/executions/${execution.id}/responses`, {
         item_id: itemId,
         is_checked: false,
-        is_not_applicable: newValue
+        is_not_applicable: newValue,
+        is_not_executed: false
       })
     } catch (error) {
       // Revert on error
@@ -166,17 +183,163 @@ export default function ChecklistExecute() {
     }
   }
 
+  const toggleNotExecuted = async (itemId, e) => {
+    e.stopPropagation()
+    if (!execution) return
+
+    const newValue = !responses[itemId]?.is_not_executed
+    setResponses(prev => ({
+      ...prev,
+      [itemId]: { ...prev[itemId], is_not_executed: newValue, is_checked: false, is_not_applicable: false }
+    }))
+
+    try {
+      await api.post(`/executions/${execution.id}/responses`, {
+        item_id: itemId,
+        is_checked: false,
+        is_not_applicable: false,
+        is_not_executed: newValue
+      })
+    } catch (error) {
+      // Revert on error
+      setResponses(prev => ({
+        ...prev,
+        [itemId]: { ...prev[itemId], is_not_executed: !newValue }
+      }))
+      toast.error('Erro ao salvar resposta')
+    }
+  }
+
+  // Upload de imagem
+  const handleImageUpload = async (itemId, file) => {
+    if (!execution || !file) return
+
+    // Validar tipo de arquivo
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp']
+    if (!allowedTypes.includes(file.type)) {
+      toast.error('Tipo de arquivo não permitido. Use JPEG, PNG, GIF ou WebP.')
+      return
+    }
+
+    // Validar tamanho (5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Arquivo muito grande. Máximo 5MB.')
+      return
+    }
+
+    setUploadingItemId(itemId)
+
+    try {
+      const formData = new FormData()
+      formData.append('image', file)
+
+      const uploadResponse = await api.post('/uploads/image', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      })
+
+      const imageUrl = uploadResponse.data.imageUrl
+
+      setResponses(prev => ({
+        ...prev,
+        [itemId]: { ...prev[itemId], image_url: imageUrl, is_checked: true }
+      }))
+
+      // Salvar resposta
+      await api.post(`/executions/${execution.id}/responses`, {
+        item_id: itemId,
+        is_checked: true,
+        image_url: imageUrl
+      })
+
+      toast.success('Imagem enviada!')
+    } catch (error) {
+      toast.error('Erro ao enviar imagem')
+    } finally {
+      setUploadingItemId(null)
+    }
+  }
+
+  // Remover imagem
+  const removeImage = async (itemId) => {
+    if (!execution) return
+
+    setResponses(prev => ({
+      ...prev,
+      [itemId]: { ...prev[itemId], image_url: '', is_checked: false }
+    }))
+
+    try {
+      await api.post(`/executions/${execution.id}/responses`, {
+        item_id: itemId,
+        is_checked: false,
+        image_url: ''
+      })
+    } catch (error) {
+      toast.error('Erro ao remover imagem')
+    }
+  }
+
+  // Atualizar resposta dissertativa
+  const handleTextResponse = async (itemId, text) => {
+    if (!execution) return
+
+    // Limitar a 30 palavras
+    const words = text.trim().split(/\s+/)
+    if (words.length > 30 && text.trim() !== '') {
+      toast.error('Limite de 30 palavras atingido')
+      return
+    }
+
+    setResponses(prev => ({
+      ...prev,
+      [itemId]: { ...prev[itemId], text_response: text, is_checked: text.trim().length > 0 }
+    }))
+  }
+
+  // Salvar resposta dissertativa (ao sair do campo)
+  const saveTextResponse = async (itemId) => {
+    if (!execution) return
+
+    const textResponse = responses[itemId]?.text_response || ''
+    
+    try {
+      await api.post(`/executions/${execution.id}/responses`, {
+        item_id: itemId,
+        is_checked: textResponse.trim().length > 0,
+        text_response: textResponse
+      })
+    } catch (error) {
+      toast.error('Erro ao salvar resposta')
+    }
+  }
+
+  // Contar palavras
+  const countWords = (text) => {
+    if (!text || !text.trim()) return 0
+    return text.trim().split(/\s+/).length
+  }
+
   const completeExecution = async () => {
     if (!execution) return
 
-    // Check required items (is_not_applicable also counts as completed)
+    // Check required items (is_not_applicable, is_not_executed também contam como respondidos)
     const requiredItems = checklist.items.filter(item => item.is_required)
-    const uncheckedRequired = requiredItems.filter(item => 
-      !responses[item.id]?.is_checked && !responses[item.id]?.is_not_applicable
-    )
+    const uncheckedRequired = requiredItems.filter(item => {
+      const resp = responses[item.id]
+      // Para itens de imagem, verificar se tem imagem
+      if (item.item_type === 'image') {
+        return !resp?.image_url && !resp?.is_not_applicable && !resp?.is_not_executed
+      }
+      // Para itens de texto, verificar se tem resposta
+      if (item.item_type === 'text') {
+        return !resp?.text_response?.trim() && !resp?.is_not_applicable && !resp?.is_not_executed
+      }
+      // Para checkbox normal
+      return !resp?.is_checked && !resp?.is_not_applicable && !resp?.is_not_executed
+    })
 
     if (uncheckedRequired.length > 0) {
-      toast.error(`${uncheckedRequired.length} item(s) obrigatório(s) não marcado(s)`)
+      toast.error(`${uncheckedRequired.length} item(s) obrigatório(s) não respondido(s)`)
       return
     }
 
@@ -719,92 +882,231 @@ export default function ChecklistExecute() {
             </div>
 
             {/* Items */}
-            {checklist.items.map((item, index) => (
-              <motion.div
-                key={item.id}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: index * 0.05 }}
-                className={`p-4 rounded-xl transition-all ${
-                  responses[item.id]?.is_checked
-                    ? 'bg-primary-500/10 border border-primary-500/30'
-                    : responses[item.id]?.is_not_applicable
-                    ? 'bg-dark-700/50 border border-dark-600'
-                    : 'bg-dark-800/50 border border-dark-700/50'
-                }`}
-              >
-                <div 
-                  onClick={() => toggleItem(item.id)}
-                  className="flex items-start gap-4 cursor-pointer"
-                >
-                  <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 transition-all ${
-                    responses[item.id]?.is_checked
-                      ? 'bg-primary-500 text-white'
-                      : responses[item.id]?.is_not_applicable
-                      ? 'bg-dark-600 text-dark-400'
-                      : 'border-2 border-dark-500'
-                  }`}>
-                    {responses[item.id]?.is_checked && (
-                      <motion.div
-                        initial={{ scale: 0 }}
-                        animate={{ scale: 1 }}
-                      >
-                        <CheckCircle2 className="w-4 h-4" />
-                      </motion.div>
-                    )}
-                    {responses[item.id]?.is_not_applicable && (
-                      <motion.div
-                        initial={{ scale: 0 }}
-                        animate={{ scale: 1 }}
-                      >
-                        <MinusCircle className="w-4 h-4" />
-                      </motion.div>
-                    )}
-                  </div>
+            {checklist.items.map((item, index) => {
+              const resp = responses[item.id] || {}
+              const isAnswered = resp.is_checked || resp.is_not_applicable || resp.is_not_executed
+              const itemType = item.item_type || 'checkbox'
 
-                  <div className="flex-1">
-                    <div className="flex items-start justify-between gap-2">
-                      <span className={`font-medium transition-colors ${
-                        responses[item.id]?.is_checked 
-                          ? 'text-primary-400' 
-                          : responses[item.id]?.is_not_applicable
-                          ? 'text-dark-500 line-through'
-                          : 'text-white'
-                      }`}>
-                        {item.title}
-                      </span>
-                      {item.is_required && !responses[item.id]?.is_not_applicable && (
-                        <span className="text-xs text-rose-400 bg-rose-500/10 px-2 py-0.5 rounded">
-                          Obrigatorio
-                        </span>
+              return (
+                <motion.div
+                  key={item.id}
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: index * 0.05 }}
+                  className={`p-4 rounded-xl transition-all ${
+                    resp.is_checked
+                      ? 'bg-primary-500/10 border border-primary-500/30'
+                      : resp.is_not_applicable
+                      ? 'bg-dark-700/50 border border-dark-600'
+                      : resp.is_not_executed
+                      ? 'bg-rose-500/5 border border-rose-500/20'
+                      : itemType === 'image'
+                      ? 'bg-amber-500/5 border border-amber-500/20'
+                      : itemType === 'text'
+                      ? 'bg-teal-500/5 border border-teal-500/20'
+                      : 'bg-dark-800/50 border border-dark-700/50'
+                  }`}
+                >
+                  {/* Header do item */}
+                  <div className="flex items-start gap-4">
+                    {/* Ícone do tipo */}
+                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                      resp.is_checked
+                        ? 'bg-primary-500 text-white'
+                        : resp.is_not_applicable
+                        ? 'bg-dark-600 text-dark-400'
+                        : resp.is_not_executed
+                        ? 'bg-rose-500/20 text-rose-400'
+                        : itemType === 'image'
+                        ? 'bg-amber-500/20 text-amber-400'
+                        : itemType === 'text'
+                        ? 'bg-teal-500/20 text-teal-400'
+                        : 'bg-dark-700 text-dark-400'
+                    }`}>
+                      {resp.is_checked ? (
+                        <CheckCircle2 className="w-5 h-5" />
+                      ) : resp.is_not_applicable ? (
+                        <MinusCircle className="w-5 h-5" />
+                      ) : resp.is_not_executed ? (
+                        <XCircle className="w-5 h-5" />
+                      ) : itemType === 'image' ? (
+                        <Camera className="w-5 h-5" />
+                      ) : itemType === 'text' ? (
+                        <FileText className="w-5 h-5" />
+                      ) : (
+                        <CheckSquare className="w-5 h-5" />
                       )}
                     </div>
-                    {item.description && (
-                      <p className={`text-sm mt-1 ${
-                        responses[item.id]?.is_not_applicable ? 'text-dark-600' : 'text-dark-400'
-                      }`}>
-                        {item.description}
-                      </p>
-                    )}
-                  </div>
-                </div>
 
-                {/* Not Applicable Button */}
-                <div className="mt-3 pt-3 border-t border-dark-700/50 flex justify-end">
-                  <button
-                    onClick={(e) => toggleNotApplicable(item.id, e)}
-                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                      responses[item.id]?.is_not_applicable
-                        ? 'bg-amber-500/20 text-amber-400'
-                        : 'bg-dark-700/50 text-dark-400 hover:bg-dark-700 hover:text-dark-300'
-                    }`}
-                  >
-                    <Ban className="w-3.5 h-3.5" />
-                    {responses[item.id]?.is_not_applicable ? 'Marcado como N/A' : 'Nao necessario'}
-                  </button>
-                </div>
-              </motion.div>
-            ))}
+                    <div className="flex-1">
+                      <div className="flex items-start justify-between gap-2">
+                        <span className={`font-medium transition-colors ${
+                          resp.is_checked 
+                            ? 'text-primary-400' 
+                            : resp.is_not_applicable
+                            ? 'text-dark-500 line-through'
+                            : resp.is_not_executed
+                            ? 'text-rose-400'
+                            : 'text-white'
+                        }`}>
+                          {item.title}
+                        </span>
+                        <div className="flex items-center gap-2">
+                          {itemType !== 'checkbox' && (
+                            <span className={`text-xs px-2 py-0.5 rounded ${
+                              itemType === 'image' 
+                                ? 'bg-amber-500/20 text-amber-400' 
+                                : 'bg-teal-500/20 text-teal-400'
+                            }`}>
+                              {itemType === 'image' ? 'Foto' : 'Texto'}
+                            </span>
+                          )}
+                          {item.is_required && !resp.is_not_applicable && !resp.is_not_executed && (
+                            <span className="text-xs text-rose-400 bg-rose-500/10 px-2 py-0.5 rounded">
+                              Obrigatório
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      {item.description && (
+                        <p className={`text-sm mt-1 ${
+                          resp.is_not_applicable || resp.is_not_executed ? 'text-dark-600' : 'text-dark-400'
+                        }`}>
+                          {item.description}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Área de resposta baseada no tipo */}
+                  {!resp.is_not_applicable && !resp.is_not_executed && (
+                    <div className="mt-4">
+                      {/* Tipo Checkbox */}
+                      {itemType === 'checkbox' && (
+                        <button
+                          onClick={() => toggleItem(item.id)}
+                          className={`w-full py-3 rounded-xl flex items-center justify-center gap-2 transition-all ${
+                            resp.is_checked
+                              ? 'bg-primary-500 text-white'
+                              : 'bg-dark-700 text-dark-300 hover:bg-dark-600'
+                          }`}
+                        >
+                          {resp.is_checked ? (
+                            <>
+                              <CheckCircle2 className="w-5 h-5" />
+                              Marcado
+                            </>
+                          ) : (
+                            <>
+                              <Circle className="w-5 h-5" />
+                              Marcar como concluído
+                            </>
+                          )}
+                        </button>
+                      )}
+
+                      {/* Tipo Imagem */}
+                      {itemType === 'image' && (
+                        <div>
+                          {resp.image_url ? (
+                            <div className="relative">
+                              <img
+                                src={resp.image_url.startsWith('http') ? resp.image_url : `${import.meta.env.VITE_API_URL || ''}${resp.image_url}`}
+                                alt="Foto do item"
+                                className="w-full h-48 object-cover rounded-xl"
+                              />
+                              <button
+                                onClick={() => removeImage(item.id)}
+                                className="absolute top-2 right-2 p-2 bg-rose-500 text-white rounded-full hover:bg-rose-600 transition-colors"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            </div>
+                          ) : (
+                            <label className={`w-full py-8 rounded-xl border-2 border-dashed flex flex-col items-center justify-center gap-2 cursor-pointer transition-all ${
+                              uploadingItemId === item.id
+                                ? 'border-primary-500 bg-primary-500/10'
+                                : 'border-dark-600 hover:border-amber-500 hover:bg-amber-500/5'
+                            }`}>
+                              {uploadingItemId === item.id ? (
+                                <>
+                                  <Loader2 className="w-8 h-8 text-primary-400 animate-spin" />
+                                  <span className="text-sm text-primary-400">Enviando...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Upload className="w-8 h-8 text-amber-400" />
+                                  <span className="text-sm text-dark-400">Clique para tirar foto ou selecionar</span>
+                                  <span className="text-xs text-dark-500">JPEG, PNG, GIF ou WebP (máx. 5MB)</span>
+                                </>
+                              )}
+                              <input
+                                type="file"
+                                accept="image/*"
+                                capture="environment"
+                                className="hidden"
+                                onChange={(e) => handleImageUpload(item.id, e.target.files[0])}
+                                disabled={uploadingItemId === item.id}
+                              />
+                            </label>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Tipo Texto */}
+                      {itemType === 'text' && (
+                        <div>
+                          <textarea
+                            value={resp.text_response || ''}
+                            onChange={(e) => handleTextResponse(item.id, e.target.value)}
+                            onBlur={() => saveTextResponse(item.id)}
+                            placeholder="Digite sua resposta aqui..."
+                            rows={3}
+                            className="w-full px-4 py-3 bg-dark-700/50 border border-dark-600 rounded-xl text-white placeholder-dark-500 focus:border-teal-500 focus:ring-1 focus:ring-teal-500 transition-all resize-none"
+                          />
+                          <div className="flex justify-between mt-2">
+                            <span className={`text-xs ${
+                              countWords(resp.text_response) > 30 ? 'text-rose-400' : 'text-dark-500'
+                            }`}>
+                              {countWords(resp.text_response)}/30 palavras
+                            </span>
+                            {resp.text_response?.trim() && (
+                              <span className="text-xs text-teal-400">✓ Respondido</span>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Botões N/A e Não Executado */}
+                  <div className="mt-3 pt-3 border-t border-dark-700/50 flex justify-end gap-2">
+                    <button
+                      onClick={(e) => toggleNotExecuted(item.id, e)}
+                      className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                        resp.is_not_executed
+                          ? 'bg-rose-500/20 text-rose-400'
+                          : 'bg-dark-700/50 text-dark-400 hover:bg-dark-700 hover:text-dark-300'
+                      }`}
+                    >
+                      <XCircle className="w-3.5 h-3.5" />
+                      {resp.is_not_executed ? 'Não Executado' : 'Não executado'}
+                    </button>
+                    <button
+                      onClick={(e) => toggleNotApplicable(item.id, e)}
+                      className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                        resp.is_not_applicable
+                          ? 'bg-amber-500/20 text-amber-400'
+                          : 'bg-dark-700/50 text-dark-400 hover:bg-dark-700 hover:text-dark-300'
+                      }`}
+                    >
+                      <Ban className="w-3.5 h-3.5" />
+                      {resp.is_not_applicable ? 'N/A' : 'N/A'}
+                    </button>
+                  </div>
+                </motion.div>
+              )
+            })}
 
             {/* Complete Button */}
             <div className="pt-6">
