@@ -4,6 +4,7 @@ import { dbRunAsync, dbGetAsync, dbAllAsync } from '../database/init.js';
 import { authenticateToken } from '../middleware/auth.js';
 import { generateCertificateImage } from '../services/certificateService.js';
 import { sendChecklistCertificate } from '../services/emailService.js';
+import { generateReportImage } from '../services/reportImageService.js';
 
 const router = express.Router();
 
@@ -563,6 +564,52 @@ router.get('/stats/:companyId', authenticateToken, async (req, res) => {
       ORDER BY execution_count DESC
     `, [startDate, companyId]);
 
+    // Tempo médio de execução (em minutos)
+    const avgExecutionTime = await dbGetAsync(`
+      SELECT AVG(
+        (julianday(e.completed_at) - julianday(e.executed_at)) * 24 * 60
+      ) as avg_minutes
+      FROM checklist_executions e
+      JOIN checklists c ON e.checklist_id = c.id
+      WHERE c.company_id = ? AND e.executed_at >= ? AND e.status = 'completed' AND e.completed_at IS NOT NULL
+    `, [companyId, startDate]);
+
+    // Execuções por hora do dia (horários de pico)
+    const executionsByHour = await dbAllAsync(`
+      SELECT 
+        CAST(strftime('%H', e.executed_at) AS INTEGER) as hour,
+        COUNT(*) as count
+      FROM checklist_executions e
+      JOIN checklists c ON e.checklist_id = c.id
+      WHERE c.company_id = ? AND e.executed_at >= ?
+      GROUP BY hour
+      ORDER BY hour
+    `, [companyId, startDate]);
+
+    // Execuções por dia da semana
+    const executionsByWeekday = await dbAllAsync(`
+      SELECT 
+        CAST(strftime('%w', e.executed_at) AS INTEGER) as weekday,
+        COUNT(*) as count
+      FROM checklist_executions e
+      JOIN checklists c ON e.checklist_id = c.id
+      WHERE c.company_id = ? AND e.executed_at >= ?
+      GROUP BY weekday
+      ORDER BY weekday
+    `, [companyId, startDate]);
+
+    // Taxa de conformidade média (itens marcados / total de itens)
+    const conformityStats = await dbGetAsync(`
+      SELECT 
+        SUM(CASE WHEN er.is_checked = 1 THEN 1 ELSE 0 END) as checked_count,
+        SUM(CASE WHEN er.is_not_applicable = 1 THEN 1 ELSE 0 END) as na_count,
+        COUNT(er.id) as total_responses
+      FROM execution_responses er
+      JOIN checklist_executions e ON er.execution_id = e.id
+      JOIN checklists c ON e.checklist_id = c.id
+      WHERE c.company_id = ? AND e.executed_at >= ? AND e.status = 'completed'
+    `, [companyId, startDate]);
+
     // Taxa de conclusão
     const completionRate = totalExecutions.count > 0 
       ? Math.round((completedExecutions.count / totalExecutions.count) * 100) 
@@ -573,6 +620,17 @@ router.get('/stats/:companyId', authenticateToken, async (req, res) => {
       ? Math.round(totalExecutions.count / parseInt(period) * 10) / 10
       : 0;
 
+    // Calcular taxa de conformidade média
+    const avgConformityRate = conformityStats?.total_responses > 0
+      ? Math.round(((conformityStats.checked_count + conformityStats.na_count) / conformityStats.total_responses) * 100)
+      : 0;
+
+    // Formatar tempo médio
+    const avgTimeMinutes = avgExecutionTime?.avg_minutes || 0;
+    const avgTimeFormatted = avgTimeMinutes > 60 
+      ? `${Math.floor(avgTimeMinutes / 60)}h ${Math.round(avgTimeMinutes % 60)}min`
+      : `${Math.round(avgTimeMinutes)}min`;
+
     res.json({
       total_executions: totalExecutions.count,
       completed_executions: completedExecutions.count,
@@ -582,14 +640,100 @@ router.get('/stats/:companyId', authenticateToken, async (req, res) => {
       not_applicable_items: notApplicableItems.count,
       completion_rate: completionRate,
       avg_executions_per_day: avgExecutionsPerDay,
+      avg_execution_time_minutes: Math.round(avgTimeMinutes),
+      avg_execution_time_formatted: avgTimeFormatted,
+      avg_conformity_rate: avgConformityRate,
       top_checklists: topChecklists,
       top_users: topUsers,
       executions_by_day: executionsByDay,
-      executions_by_category: executionsByCategory
+      executions_by_category: executionsByCategory,
+      executions_by_hour: executionsByHour,
+      executions_by_weekday: executionsByWeekday
     });
   } catch (error) {
     console.error('Erro ao obter estatísticas:', error);
     res.status(500).json({ error: 'Erro ao obter estatísticas' });
+  }
+});
+
+// Gerar imagem do relatório de métricas
+router.get('/stats/:companyId/image', authenticateToken, async (req, res) => {
+  try {
+    const { companyId } = req.params;
+    const { period = '30' } = req.query;
+
+    // Buscar dados da empresa
+    const company = await dbGetAsync('SELECT name FROM companies WHERE id = ?', [companyId]);
+    if (!company) {
+      return res.status(404).json({ error: 'Empresa não encontrada' });
+    }
+
+    // Buscar estatísticas (reutilizando a lógica acima)
+    const startDate = new Date(Date.now() - parseInt(period) * 24 * 60 * 60 * 1000).toISOString();
+    const todayStart = new Date().toISOString().split('T')[0];
+
+    const [
+      totalExecutions,
+      completedExecutions,
+      todayExecutions,
+      inProgressExecutions,
+      topChecklists,
+      topUsers,
+      executionsByHour,
+      executionsByWeekday,
+      avgExecutionTime,
+      conformityStats
+    ] = await Promise.all([
+      dbGetAsync(`SELECT COUNT(*) as count FROM checklist_executions e JOIN checklists c ON e.checklist_id = c.id WHERE c.company_id = ? AND e.executed_at >= ?`, [companyId, startDate]),
+      dbGetAsync(`SELECT COUNT(*) as count FROM checklist_executions e JOIN checklists c ON e.checklist_id = c.id WHERE c.company_id = ? AND e.executed_at >= ? AND e.status = 'completed'`, [companyId, startDate]),
+      dbGetAsync(`SELECT COUNT(*) as count FROM checklist_executions e JOIN checklists c ON e.checklist_id = c.id WHERE c.company_id = ? AND DATE(e.executed_at) = ?`, [companyId, todayStart]),
+      dbGetAsync(`SELECT COUNT(*) as count FROM checklist_executions e JOIN checklists c ON e.checklist_id = c.id WHERE c.company_id = ? AND e.status = 'in_progress'`, [companyId]),
+      dbAllAsync(`SELECT c.title, COUNT(e.id) as execution_count FROM checklists c LEFT JOIN checklist_executions e ON c.id = e.checklist_id AND e.executed_at >= ? WHERE c.company_id = ? GROUP BY c.id ORDER BY execution_count DESC LIMIT 5`, [startDate, companyId]),
+      dbAllAsync(`SELECT u.name, COUNT(e.id) as execution_count FROM users u JOIN checklist_executions e ON e.executed_by = u.id JOIN checklists c ON e.checklist_id = c.id WHERE c.company_id = ? AND e.executed_at >= ? GROUP BY u.id ORDER BY execution_count DESC LIMIT 5`, [companyId, startDate]),
+      dbAllAsync(`SELECT CAST(strftime('%H', e.executed_at) AS INTEGER) as hour, COUNT(*) as count FROM checklist_executions e JOIN checklists c ON e.checklist_id = c.id WHERE c.company_id = ? AND e.executed_at >= ? GROUP BY hour ORDER BY hour`, [companyId, startDate]),
+      dbAllAsync(`SELECT CAST(strftime('%w', e.executed_at) AS INTEGER) as weekday, COUNT(*) as count FROM checklist_executions e JOIN checklists c ON e.checklist_id = c.id WHERE c.company_id = ? AND e.executed_at >= ? GROUP BY weekday ORDER BY weekday`, [companyId, startDate]),
+      dbGetAsync(`SELECT AVG((julianday(e.completed_at) - julianday(e.executed_at)) * 24 * 60) as avg_minutes FROM checklist_executions e JOIN checklists c ON e.checklist_id = c.id WHERE c.company_id = ? AND e.executed_at >= ? AND e.status = 'completed' AND e.completed_at IS NOT NULL`, [companyId, startDate]),
+      dbGetAsync(`SELECT SUM(CASE WHEN er.is_checked = 1 THEN 1 ELSE 0 END) as checked_count, SUM(CASE WHEN er.is_not_applicable = 1 THEN 1 ELSE 0 END) as na_count, COUNT(er.id) as total_responses FROM execution_responses er JOIN checklist_executions e ON er.execution_id = e.id JOIN checklists c ON e.checklist_id = c.id WHERE c.company_id = ? AND e.executed_at >= ? AND e.status = 'completed'`, [companyId, startDate])
+    ]);
+
+    const completionRate = totalExecutions.count > 0 ? Math.round((completedExecutions.count / totalExecutions.count) * 100) : 0;
+    const avgExecutionsPerDay = parseInt(period) > 0 ? Math.round(totalExecutions.count / parseInt(period) * 10) / 10 : 0;
+    const avgTimeMinutes = avgExecutionTime?.avg_minutes || 0;
+    const avgTimeFormatted = avgTimeMinutes > 60 ? `${Math.floor(avgTimeMinutes / 60)}h ${Math.round(avgTimeMinutes % 60)}min` : `${Math.round(avgTimeMinutes)}min`;
+    const avgConformityRate = conformityStats?.total_responses > 0 ? Math.round(((conformityStats.checked_count + conformityStats.na_count) / conformityStats.total_responses) * 100) : 0;
+
+    const periodLabel = period === '7' ? 'Últimos 7 dias' : period === '15' ? 'Últimos 15 dias' : period === '30' ? 'Últimos 30 dias' : period === '60' ? 'Últimos 60 dias' : `Últimos ${period} dias`;
+
+    // Gerar imagem
+    const imageBuffer = await generateReportImage({
+      companyName: company.name,
+      period: periodLabel,
+      generatedBy: req.user.name,
+      stats: {
+        total_executions: totalExecutions.count,
+        completed_executions: completedExecutions.count,
+        today_executions: todayExecutions.count,
+        in_progress_executions: inProgressExecutions.count,
+        completion_rate: completionRate,
+        avg_executions_per_day: avgExecutionsPerDay,
+        avg_execution_time_formatted: avgTimeFormatted,
+        avg_conformity_rate: avgConformityRate,
+        top_checklists: topChecklists,
+        top_users: topUsers,
+        executions_by_hour: executionsByHour,
+        executions_by_weekday: executionsByWeekday
+      }
+    });
+
+    res.set({
+      'Content-Type': 'image/png',
+      'Content-Disposition': `attachment; filename="relatorio-${company.name.replace(/[^a-zA-Z0-9]/g, '-')}-${Date.now()}.png"`
+    });
+    res.send(imageBuffer);
+
+  } catch (error) {
+    console.error('Erro ao gerar imagem do relatório:', error);
+    res.status(500).json({ error: 'Erro ao gerar imagem do relatório' });
   }
 });
 

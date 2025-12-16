@@ -16,7 +16,10 @@ import {
   Filter,
   Settings,
   FileDown,
-  Loader2
+  Loader2,
+  Image,
+  Share2,
+  Clipboard
 } from 'lucide-react'
 import api from '../services/api'
 import { useAuthStore } from '../store/authStore'
@@ -36,6 +39,20 @@ const METRIC_OPTIONS = [
     id: 'executions_by_day',
     label: 'Execucoes por Dia',
     description: 'Grafico de execucoes ao longo do periodo',
+    icon: TrendingUp,
+    category: 'geral'
+  },
+  {
+    id: 'avg_time',
+    label: 'Tempo Medio de Execucao',
+    description: 'Tempo medio para concluir checklists',
+    icon: Clock,
+    category: 'geral'
+  },
+  {
+    id: 'peak_hours',
+    label: 'Horarios de Pico',
+    description: 'Horarios com mais execucoes',
     icon: TrendingUp,
     category: 'geral'
   },
@@ -103,10 +120,13 @@ export default function Reports() {
   const [selectedMetrics, setSelectedMetrics] = useState(['summary', 'top_checklists', 'top_users'])
   const [period, setPeriod] = useState('30')
   const [isGenerating, setIsGenerating] = useState(false)
+  const [isGeneratingImage, setIsGeneratingImage] = useState(false)
   const [stats, setStats] = useState(null)
   const [checklists, setChecklists] = useState([])
   const [users, setUsers] = useState([])
   const [categories, setCategories] = useState([])
+  const [reportImage, setReportImage] = useState(null)
+  const [showImageModal, setShowImageModal] = useState(false)
 
   useEffect(() => {
     if (company?.id) {
@@ -446,6 +466,73 @@ export default function Reports() {
         yPosition = drawBarChart(doc, categoriesChartData, yPosition, 'Execucoes por Categoria', [99, 102, 241])
       }
 
+      // Tempo Medio de Execucao
+      if (selectedMetrics.includes('avg_time')) {
+        if (yPosition > 200) {
+          doc.addPage()
+          yPosition = 20
+        }
+
+        doc.setFontSize(14)
+        doc.setTextColor(40, 40, 40)
+        doc.text('Tempo Medio de Execucao', 20, yPosition)
+        yPosition += 10
+
+        const avgTimeData = [
+          ['Tempo Medio', stats?.avg_execution_time_formatted || '0min'],
+          ['Tempo em Minutos', `${stats?.avg_execution_time_minutes || 0} minutos`],
+          ['Taxa de Conformidade', `${stats?.avg_conformity_rate || 0}%`]
+        ]
+
+        autoTable(doc, {
+          startY: yPosition,
+          head: [['Metrica', 'Valor']],
+          body: avgTimeData,
+          theme: 'striped',
+          headStyles: { fillColor: [45, 212, 191] },
+          margin: { left: 20, right: 20 }
+        })
+
+        yPosition = doc.lastAutoTable.finalY + 15
+      }
+
+      // Horarios de Pico
+      if (selectedMetrics.includes('peak_hours') && stats?.executions_by_hour?.length > 0) {
+        if (yPosition > 180) {
+          doc.addPage()
+          yPosition = 20
+        }
+
+        const hourLabels = ['6h', '7h', '8h', '9h', '10h', '11h', '12h', '13h', '14h', '15h', '16h', '17h', '18h', '19h', '20h', '21h', '22h']
+        const hourData = new Array(24).fill(0)
+        stats.executions_by_hour.forEach(item => {
+          hourData[item.hour] = item.count
+        })
+
+        // Filtrar apenas horario comercial (6h-22h)
+        const peakHoursData = []
+        for (let h = 6; h <= 22; h++) {
+          if (hourData[h] > 0) {
+            peakHoursData.push({ label: `${h}h`, value: hourData[h] })
+          }
+        }
+
+        if (peakHoursData.length > 0) {
+          yPosition = drawBarChart(doc, peakHoursData.slice(0, 10), yPosition, 'Horarios de Pico', [45, 212, 191])
+        }
+
+        // Dias da semana
+        if (stats?.executions_by_weekday?.length > 0) {
+          const weekdayNames = ['Domingo', 'Segunda', 'Terca', 'Quarta', 'Quinta', 'Sexta', 'Sabado']
+          const weekdayData = stats.executions_by_weekday.map(d => ({
+            label: weekdayNames[d.weekday],
+            value: d.count
+          }))
+
+          yPosition = drawBarChart(doc, weekdayData, yPosition, 'Execucoes por Dia da Semana', [139, 92, 246])
+        }
+      }
+
       // Execucoes Pendentes
       if (selectedMetrics.includes('pending_executions')) {
         if (yPosition > 250) {
@@ -502,6 +589,66 @@ export default function Reports() {
     }
   }
 
+  // Gerar imagem do relatorio
+  const generateImage = async () => {
+    setIsGeneratingImage(true)
+    try {
+      const response = await api.get(`/executions/stats/${company.id}/image?period=${period}`, {
+        responseType: 'blob'
+      })
+      
+      const imageUrl = URL.createObjectURL(response.data)
+      setReportImage(imageUrl)
+      setShowImageModal(true)
+      toast.success('Imagem gerada com sucesso!')
+    } catch (error) {
+      console.error('Erro ao gerar imagem:', error)
+      toast.error('Erro ao gerar imagem do relatorio')
+    } finally {
+      setIsGeneratingImage(false)
+    }
+  }
+
+  // Download da imagem
+  const handleDownloadImage = () => {
+    if (!reportImage) return
+    const link = document.createElement('a')
+    link.href = reportImage
+    link.download = `relatorio-${company.name.replace(/[^a-zA-Z0-9]/g, '-')}-${Date.now()}.png`
+    link.click()
+    toast.success('Imagem baixada!')
+  }
+
+  // Copiar imagem para clipboard
+  const handleCopyImage = async () => {
+    if (!reportImage) return
+    try {
+      const response = await fetch(reportImage)
+      const blob = await response.blob()
+      await navigator.clipboard.write([
+        new ClipboardItem({ [blob.type]: blob })
+      ])
+      toast.success('Imagem copiada para a area de transferencia!')
+    } catch (error) {
+      console.error('Erro ao copiar imagem:', error)
+      toast.error('Erro ao copiar. Baixe a imagem.')
+      handleDownloadImage()
+    }
+  }
+
+  // Compartilhar via WhatsApp
+  const handleShareWhatsApp = () => {
+    const periodLabel = PERIOD_OPTIONS.find(p => p.value === period)?.label || ''
+    const text = encodeURIComponent(
+      `Relatorio de Metricas - ${company.name}\n` +
+      `Periodo: ${periodLabel}\n` +
+      `Gerado em: ${new Date().toLocaleDateString('pt-BR')}\n\n` +
+      `Copie a imagem e cole na conversa para enviar o relatorio completo.`
+    )
+    window.open(`https://wa.me/?text=${text}`, '_blank')
+    toast.success('Abrindo WhatsApp. Cole a imagem na conversa!')
+  }
+
   if (!company) {
     return (
       <div className="flex flex-col items-center justify-center h-64 text-center">
@@ -529,25 +676,44 @@ export default function Reports() {
       >
         <div>
           <h1 className="text-2xl lg:text-3xl font-bold text-white">Exportar Relatorio</h1>
-          <p className="text-dark-400 mt-1">Selecione as metricas e gere um PDF personalizado</p>
+          <p className="text-dark-400 mt-1">Gere relatorios em PDF ou imagem para compartilhar</p>
         </div>
-        <button
-          onClick={generatePDF}
-          disabled={isGenerating || selectedMetrics.length === 0}
-          className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-primary-500 to-accent-teal text-white font-semibold rounded-xl hover:shadow-lg hover:shadow-primary-500/25 transition-all btn-glow disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {isGenerating ? (
-            <>
-              <Loader2 className="w-5 h-5 animate-spin" />
-              Gerando...
-            </>
-          ) : (
-            <>
-              <FileDown className="w-5 h-5" />
-              Gerar PDF
-            </>
-          )}
-        </button>
+        <div className="flex flex-wrap gap-3">
+          <button
+            onClick={generateImage}
+            disabled={isGeneratingImage}
+            className="inline-flex items-center justify-center gap-2 px-5 py-3 bg-gradient-to-r from-accent-teal to-green-500 text-white font-semibold rounded-xl hover:shadow-lg hover:shadow-accent-teal/25 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isGeneratingImage ? (
+              <>
+                <Loader2 className="w-5 h-5 animate-spin" />
+                Gerando...
+              </>
+            ) : (
+              <>
+                <Image className="w-5 h-5" />
+                Gerar Imagem
+              </>
+            )}
+          </button>
+          <button
+            onClick={generatePDF}
+            disabled={isGenerating || selectedMetrics.length === 0}
+            className="inline-flex items-center justify-center gap-2 px-5 py-3 bg-gradient-to-r from-primary-500 to-primary-600 text-white font-semibold rounded-xl hover:shadow-lg hover:shadow-primary-500/25 transition-all btn-glow disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isGenerating ? (
+              <>
+                <Loader2 className="w-5 h-5 animate-spin" />
+                Gerando...
+              </>
+            ) : (
+              <>
+                <FileDown className="w-5 h-5" />
+                Gerar PDF
+              </>
+            )}
+          </button>
+        </div>
       </motion.div>
 
       {/* Configuracoes */}
@@ -688,6 +854,78 @@ export default function Reports() {
           </div>
         </motion.div>
       </div>
+
+      {/* Modal de Imagem do Relatorio */}
+      {showImageModal && reportImage && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          onClick={() => setShowImageModal(false)}
+        >
+          <motion.div
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="bg-dark-800 rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header do Modal */}
+            <div className="p-4 border-b border-dark-700 flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-white">Relatorio de Metricas</h3>
+                <p className="text-sm text-dark-400">{company.name} - {PERIOD_OPTIONS.find(p => p.value === period)?.label}</p>
+              </div>
+              <button
+                onClick={() => setShowImageModal(false)}
+                className="p-2 hover:bg-dark-700 rounded-lg transition-colors"
+              >
+                <svg className="w-5 h-5 text-dark-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Imagem */}
+            <div className="p-4 overflow-auto max-h-[60vh] bg-dark-900/50">
+              <img
+                src={reportImage}
+                alt="Relatorio de Metricas"
+                className="w-full h-auto rounded-lg shadow-2xl"
+              />
+            </div>
+
+            {/* Botoes de Acao */}
+            <div className="p-4 border-t border-dark-700 space-y-3">
+              <div className="grid grid-cols-3 gap-3">
+                <button
+                  onClick={handleDownloadImage}
+                  className="flex items-center justify-center gap-2 py-3 bg-dark-700 hover:bg-dark-600 text-white rounded-xl transition-colors"
+                >
+                  <Download className="w-5 h-5" />
+                  Baixar
+                </button>
+                <button
+                  onClick={handleCopyImage}
+                  className="flex items-center justify-center gap-2 py-3 bg-dark-700 hover:bg-dark-600 text-white rounded-xl transition-colors"
+                >
+                  <Clipboard className="w-5 h-5" />
+                  Copiar
+                </button>
+                <button
+                  onClick={handleShareWhatsApp}
+                  className="flex items-center justify-center gap-2 py-3 bg-green-600 hover:bg-green-700 text-white rounded-xl transition-colors"
+                >
+                  <Share2 className="w-5 h-5" />
+                  WhatsApp
+                </button>
+              </div>
+              <p className="text-xs text-dark-500 text-center">
+                Dica: Copie a imagem e cole diretamente no WhatsApp para compartilhar
+              </p>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
     </div>
   )
 }

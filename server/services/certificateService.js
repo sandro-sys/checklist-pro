@@ -5,6 +5,20 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Função para formatar data no fuso horário de Brasília
+function formatDateBrasilia(dateStr) {
+  if (!dateStr) return '';
+  const date = new Date(dateStr);
+  return date.toLocaleString('pt-BR', {
+    timeZone: 'America/Sao_Paulo',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+}
+
 // Cores do tema CheckList App
 const COLORS = {
   background: '#0f1419',
@@ -182,26 +196,14 @@ export async function generateCertificateImage(data) {
   ctx.fillText(`Executado por: ${executedBy}`, infoX, y);
   y += 22;
 
-  // Hora de início
-  const startStr = new Date(startedAt).toLocaleString('pt-BR', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
-  });
+  // Hora de início (fuso horário de Brasília)
+  const startStr = formatDateBrasilia(startedAt);
   ctx.fillText(`Início: ${startStr}`, infoX, y);
   y += 22;
 
-  // Hora de fim
+  // Hora de fim (fuso horário de Brasília)
   if (completedAt) {
-    const endStr = new Date(completedAt).toLocaleString('pt-BR', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
+    const endStr = formatDateBrasilia(completedAt);
     ctx.fillText(`Fim: ${endStr}`, infoX, y);
     y += 22;
   }
