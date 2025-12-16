@@ -343,11 +343,11 @@ export async function generateReportImage(data) {
 
   y += weekdayBarMaxHeight + 40;
 
-  // ============ HORÁRIOS DE PICO ============
+  // ============ HORÁRIOS DE EXECUÇÃO ============
   ctx.font = 'bold 16px Arial, sans-serif';
   ctx.fillStyle = COLORS.textWhite;
   ctx.textAlign = 'left';
-  ctx.fillText('⏰ Horários de Pico', padding, y);
+  ctx.fillText('⏰ Horários de Execução', padding, y);
   y += 25;
 
   const hourData = new Array(24).fill(0);

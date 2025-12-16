@@ -51,8 +51,8 @@ const METRIC_OPTIONS = [
   },
   {
     id: 'peak_hours',
-    label: 'Horarios de Pico',
-    description: 'Horarios com mais execucoes',
+    label: 'Horarios de Execucao',
+    description: 'Distribuicao de execucoes por horario',
     icon: TrendingUp,
     category: 'geral'
   },
@@ -518,7 +518,7 @@ export default function Reports() {
         }
 
         if (peakHoursData.length > 0) {
-          yPosition = drawBarChart(doc, peakHoursData.slice(0, 10), yPosition, 'Horarios de Pico', [45, 212, 191])
+          yPosition = drawBarChart(doc, peakHoursData.slice(0, 10), yPosition, 'Horarios de Execucao', [45, 212, 191])
         }
 
         // Dias da semana
