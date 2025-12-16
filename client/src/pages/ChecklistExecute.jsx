@@ -241,7 +241,7 @@ export default function ChecklistExecute() {
     }
   }
 
-  // Compartilhar via WhatsApp
+  // Compartilhar via WhatsApp (tenta enviar com imagem)
   const handleShareWhatsApp = async () => {
     if (!shareData) return
 
@@ -266,36 +266,37 @@ export default function ChecklistExecute() {
         if (error.name === 'AbortError') {
           return // Usuário cancelou
         }
-        console.log('Web Share API falhou, tentando alternativa...')
+        console.log('Web Share API falhou, usando fallback...')
       }
     }
 
-    // Alternativa: baixar imagem primeiro e depois abrir WhatsApp
+    // Fallback: apenas texto (imagem deve ser baixada separadamente)
+    const text = encodeURIComponent(
+      `✅ *Checklist "${shareData.execution.checklistTitle}" concluído!*\n\n` +
+      `🏢 Empresa: ${shareData.execution.companyName}\n` +
+      `👤 Executado por: ${shareData.execution.executedBy}\n` +
+      `📊 Conformidade: ${shareData.execution.completionRate}%`
+    )
+    window.open(`https://wa.me/?text=${text}`, '_blank')
+  }
+
+  // Copiar imagem para área de transferência
+  const handleCopyImage = async () => {
+    if (!shareData) return
+
     try {
-      // Baixar a imagem automaticamente
-      const link = document.createElement('a')
-      link.href = shareData.image
-      link.download = shareData.filename
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-
-      // Aguardar um pouco para o download iniciar
-      await new Promise(resolve => setTimeout(resolve, 500))
-
-      // Abrir WhatsApp com texto
-      const text = encodeURIComponent(
-        `✅ *Checklist "${shareData.execution.checklistTitle}" concluído!*\n\n` +
-        `🏢 Empresa: ${shareData.execution.companyName}\n` +
-        `👤 Executado por: ${shareData.execution.executedBy}\n` +
-        `📊 Conformidade: ${shareData.execution.completionRate}%\n\n` +
-        `📎 _Anexe a imagem que foi baixada para enviar o comprovante._`
-      )
-      window.open(`https://wa.me/?text=${text}`, '_blank')
+      const response = await fetch(shareData.image)
+      const blob = await response.blob()
       
-      toast.success('Imagem baixada! Anexe no WhatsApp.')
+      await navigator.clipboard.write([
+        new ClipboardItem({ 'image/png': blob })
+      ])
+      
+      toast.success('Imagem copiada! Cole no WhatsApp com Ctrl+V')
     } catch (error) {
-      toast.error('Erro ao compartilhar')
+      // Fallback: baixar a imagem
+      handleDownload()
+      toast.success('Imagem baixada! Anexe no WhatsApp.')
     }
   }
 
@@ -449,14 +450,26 @@ export default function ChecklistExecute() {
                           Baixar Imagem
                         </button>
 
-                        {/* WhatsApp */}
-                        <button
-                          onClick={handleShareWhatsApp}
-                          className="w-full py-3 bg-green-600 hover:bg-green-700 text-white rounded-xl transition-colors flex items-center justify-center gap-2"
-                        >
-                          <MessageCircle className="w-5 h-5" />
-                          Enviar por WhatsApp
-                        </button>
+                        {/* WhatsApp - dois botões */}
+                        <div className="grid grid-cols-2 gap-2">
+                          <button
+                            onClick={handleCopyImage}
+                            className="py-3 bg-dark-600 hover:bg-dark-500 text-white rounded-xl transition-colors flex items-center justify-center gap-2 text-sm"
+                          >
+                            <Download className="w-4 h-4" />
+                            Copiar Imagem
+                          </button>
+                          <button
+                            onClick={handleShareWhatsApp}
+                            className="py-3 bg-green-600 hover:bg-green-700 text-white rounded-xl transition-colors flex items-center justify-center gap-2 text-sm"
+                          >
+                            <MessageCircle className="w-4 h-4" />
+                            Abrir WhatsApp
+                          </button>
+                        </div>
+                        <p className="text-xs text-dark-500 text-center">
+                          Copie a imagem e cole no WhatsApp (Ctrl+V)
+                        </p>
 
                         {/* Email */}
                         <div className="pt-3 border-t border-dark-700">
