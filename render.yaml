@@ -4,7 +4,7 @@
 services:
   # Backend API
   - type: web
-    name: checklist-pro-api
+    name: checklist-app-api
     runtime: node
     plan: free
     buildCommand: npm install && npm run build
@@ -21,7 +21,7 @@ services:
         generateValue: true
       - key: DATABASE_URL
         fromDatabase:
-          name: checklist-pro-db
+          name: checklist-app-db
           property: connectionString
       - key: FRONTEND_URL
         sync: false # Definir manualmente após deploy do frontend
@@ -31,7 +31,7 @@ services:
         sync: false # Chave pública do Mercado Pago - definir manualmente
 
 databases:
-  - name: checklist-pro-db
+  - name: checklist-app-db
     plan: free
     databaseName: checklistpro
     user: checklistpro_user

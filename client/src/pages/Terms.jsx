@@ -19,7 +19,7 @@ export default function Terms() {
               <div className="w-10 h-10 bg-gradient-to-br from-primary-500 to-accent-teal rounded-xl flex items-center justify-center">
                 <CheckSquare className="w-5 h-5 text-white" />
               </div>
-              <span className="font-bold text-white">CheckList Pro</span>
+              <span className="font-bold text-white">CheckList App</span>
             </div>
           </div>
         </div>
@@ -44,7 +44,7 @@ export default function Terms() {
           <div className="prose prose-invert max-w-none">
             <div className="bg-dark-800/50 border border-dark-700/50 rounded-2xl p-6 mb-8">
               <p className="text-dark-300 leading-relaxed">
-                Bem-vindo ao CheckList Pro! Ao utilizar nossa plataforma, você concorda com 
+                Bem-vindo ao CheckList App! Ao utilizar nossa plataforma, você concorda com 
                 os termos e condições descritos abaixo. Leia atentamente antes de usar nossos serviços.
               </p>
             </div>
@@ -59,7 +59,7 @@ export default function Terms() {
                 </h2>
                 <ul className="space-y-3 text-dark-300">
                   <li>
-                    <strong className="text-white">Plataforma:</strong> O sistema CheckList Pro, 
+                    <strong className="text-white">Plataforma:</strong> O sistema CheckList App, 
                     incluindo website e aplicativos.
                   </li>
                   <li>
@@ -155,7 +155,7 @@ export default function Terms() {
                 </h2>
                 <p className="text-dark-300">
                   Todo o conteúdo da plataforma (código, design, textos, marcas) é de 
-                  propriedade da CheckList Pro ou de seus licenciadores. Os checklists e 
+                  propriedade da CheckList App ou de seus licenciadores. Os checklists e 
                   dados criados pelos usuários permanecem de propriedade dos respectivos usuários.
                 </p>
               </section>
@@ -166,7 +166,7 @@ export default function Terms() {
                   <AlertTriangle className="w-5 h-5 text-accent-amber" />
                   Limitação de Responsabilidade
                 </h2>
-                <p className="text-dark-300 mb-4">A CheckList Pro não se responsabiliza por:</p>
+                <p className="text-dark-300 mb-4">A CheckList App não se responsabiliza por:</p>
                 <ul className="space-y-2 text-dark-300">
                   <li className="flex items-start gap-2">
                     <span className="text-accent-amber mt-1">•</span>

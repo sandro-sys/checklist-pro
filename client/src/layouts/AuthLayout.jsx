@@ -20,7 +20,7 @@ export default function AuthLayout() {
               <CheckSquare className="w-9 h-9 text-white" />
             </div>
             <div>
-              <h1 className="text-4xl font-bold text-white tracking-tight">CheckList Pro</h1>
+              <h1 className="text-4xl font-bold text-white tracking-tight">CheckList App</h1>
               <p className="text-dark-400 text-sm mt-1">Powered by SO.RH.IA</p>
             </div>
           </div>
@@ -65,7 +65,7 @@ export default function AuthLayout() {
               <CheckSquare className="w-6 h-6 text-white" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-white tracking-tight">CheckList Pro</h1>
+              <h1 className="text-2xl font-bold text-white tracking-tight">CheckList App</h1>
               <p className="text-dark-400 text-xs">Powered by SO.RH.IA</p>
             </div>
           </div>

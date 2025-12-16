@@ -482,7 +482,7 @@ export default function Reports() {
         doc.setFontSize(8)
         doc.setTextColor(150, 150, 150)
         doc.text(
-          `Pagina ${i} de ${pageCount} - CheckList Pro - Powered by SO.RH.IA`,
+          `Pagina ${i} de ${pageCount} - CheckList App - Powered by SO.RH.IA`,
           pageWidth / 2,
           doc.internal.pageSize.getHeight() - 10,
           { align: 'center' }

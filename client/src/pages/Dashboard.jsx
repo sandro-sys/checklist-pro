@@ -78,7 +78,7 @@ export default function Dashboard() {
         <div className="w-20 h-20 bg-gradient-to-br from-primary-500/20 to-accent-teal/20 rounded-2xl flex items-center justify-center mx-auto mb-6">
           <Building2 className="w-10 h-10 text-primary-400" />
         </div>
-        <h1 className="text-3xl font-bold text-white mb-4">Bem-vindo ao CheckList Pro!</h1>
+        <h1 className="text-3xl font-bold text-white mb-4">Bem-vindo ao CheckList App!</h1>
         <p className="text-dark-400 text-lg mb-8">
           Para comecar, voce precisa cadastrar sua empresa. 
           Isso permitira criar checklists e gerenciar sua equipe.

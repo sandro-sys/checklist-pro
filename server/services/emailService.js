@@ -1,6 +1,10 @@
 import nodemailer from 'nodemailer';
+import { Resend } from 'resend';
 
-// Configurar transporter
+// Configurar Resend (API HTTP - funciona em qualquer hospedagem)
+const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
+
+// Configurar transporter SMTP (fallback)
 const createTransporter = () => {
   // Se tiver SMTP configurado, usa ele
   if (process.env.SMTP_HOST) {
@@ -28,7 +32,7 @@ const createTransporter = () => {
       tls: {
         rejectUnauthorized: false
       },
-      connectionTimeout: 10000, // 10 segundos
+      connectionTimeout: 10000,
       greetingTimeout: 10000,
       socketTimeout: 15000
     });
@@ -48,7 +52,7 @@ const baseTemplate = (content) => `
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>CheckList Pro</title>
+  <title>CheckList App</title>
   <style>
     body {
       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -139,8 +143,8 @@ const baseTemplate = (content) => `
   <div class="container">
     ${content}
     <div class="footer">
-      <p>CheckList Pro - Sistema de Gestao de Checklists</p>
-      <p><a href="https://checklist-pro.rhumarh.com">checklist-pro.rhumarh.com</a></p>
+      <p>CheckList App - Sistema de Gestao de Checklists</p>
+      <p><a href="https://checklist-app.rhumarh.com">checklist-app.rhumarh.com</a></p>
       <p style="margin-top: 15px; font-size: 12px;">
         Este email foi enviado automaticamente. Por favor, nao responda.
       </p>
@@ -162,12 +166,12 @@ export const sendSubscriptionConfirmation = async (to, data) => {
 
   const html = baseTemplate(`
     <div class="header">
-      <h1>CheckList Pro</h1>
+      <h1>CheckList App</h1>
       <p>Assinatura Confirmada!</p>
     </div>
     <div class="content">
       <h2>Ola, ${userName}!</h2>
-      <p>Sua assinatura do <strong>CheckList Pro</strong> foi ativada com sucesso!</p>
+      <p>Sua assinatura do <strong>CheckList App</strong> foi ativada com sucesso!</p>
       
       <div class="highlight-box">
         <strong>Parabens!</strong> Agora voce tem acesso a todos os recursos do plano ${planName}.
@@ -195,7 +199,7 @@ export const sendSubscriptionConfirmation = async (to, data) => {
       <p>Acesse sua conta para comecar a criar seus checklists:</p>
       
       <center>
-        <a href="https://checklist-pro.rhumarh.com/dashboard" class="button">
+        <a href="https://checklist-app.rhumarh.com/dashboard" class="button">
           Acessar Dashboard
         </a>
       </center>
@@ -206,7 +210,7 @@ export const sendSubscriptionConfirmation = async (to, data) => {
     </div>
   `);
 
-  return sendEmail(to, 'Assinatura Confirmada - CheckList Pro', html);
+  return sendEmail(to, 'Assinatura Confirmada - CheckList App', html);
 };
 
 // Email de pagamento recebido
@@ -223,7 +227,7 @@ export const sendPaymentReceived = async (to, data) => {
 
   const html = baseTemplate(`
     <div class="header">
-      <h1>CheckList Pro</h1>
+      <h1>CheckList App</h1>
       <p>Pagamento Recebido</p>
     </div>
     <div class="content">
@@ -258,14 +262,14 @@ export const sendPaymentReceived = async (to, data) => {
       </div>
       
       <center>
-        <a href="https://checklist-pro.rhumarh.com/dashboard" class="button">
+        <a href="https://checklist-app.rhumarh.com/dashboard" class="button">
           Acessar Dashboard
         </a>
       </center>
     </div>
   `);
 
-  return sendEmail(to, 'Pagamento Recebido - CheckList Pro', html);
+  return sendEmail(to, 'Pagamento Recebido - CheckList App', html);
 };
 
 // Email de trial ativado
@@ -280,7 +284,7 @@ export const sendTrialActivated = async (to, data) => {
 
   const html = baseTemplate(`
     <div class="header">
-      <h1>CheckList Pro</h1>
+      <h1>CheckList App</h1>
       <p>Trial Ativado!</p>
     </div>
     <div class="content">
@@ -288,7 +292,7 @@ export const sendTrialActivated = async (to, data) => {
       <p>Seu periodo de teste gratuito foi ativado com sucesso!</p>
       
       <div class="highlight-box">
-        Voce tem <strong>14 dias gratis</strong> para experimentar o CheckList Pro.
+        Voce tem <strong>14 dias gratis</strong> para experimentar o CheckList App.
       </div>
       
       <table class="details-table">
@@ -317,18 +321,18 @@ export const sendTrialActivated = async (to, data) => {
       <p>Comece agora a criar seus checklists:</p>
       
       <center>
-        <a href="https://checklist-pro.rhumarh.com/checklists/create" class="button">
+        <a href="https://checklist-app.rhumarh.com/checklists/create" class="button">
           Criar Primeiro Checklist
         </a>
       </center>
       
       <p style="color: #6b7280; font-size: 14px; margin-top: 30px;">
-        Apos o periodo de teste, escolha um plano para continuar usando o CheckList Pro.
+        Apos o periodo de teste, escolha um plano para continuar usando o CheckList App.
       </p>
     </div>
   `);
 
-  return sendEmail(to, 'Trial Ativado - CheckList Pro', html);
+  return sendEmail(to, 'Trial Ativado - CheckList App', html);
 };
 
 // Email de assinatura cancelada
@@ -343,12 +347,12 @@ export const sendSubscriptionCancelled = async (to, data) => {
 
   const html = baseTemplate(`
     <div class="header" style="background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%);">
-      <h1>CheckList Pro</h1>
+      <h1>CheckList App</h1>
       <p>Assinatura Cancelada</p>
     </div>
     <div class="content">
       <h2>Ola, ${userName}</h2>
-      <p>Sua assinatura do CheckList Pro foi cancelada conforme solicitado.</p>
+      <p>Sua assinatura do CheckList App foi cancelada conforme solicitado.</p>
       
       <div class="highlight-box">
         Voce ainda tera acesso ate <strong>${formattedDate}</strong>.
@@ -368,14 +372,14 @@ export const sendSubscriptionCancelled = async (to, data) => {
       <p>Sentiremos sua falta! Se mudar de ideia, voce pode reativar sua assinatura a qualquer momento:</p>
       
       <center>
-        <a href="https://checklist-pro.rhumarh.com/pricing" class="button" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%);">
+        <a href="https://checklist-app.rhumarh.com/pricing" class="button" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%);">
           Reativar Assinatura
         </a>
       </center>
     </div>
   `);
 
-  return sendEmail(to, 'Assinatura Cancelada - CheckList Pro', html);
+  return sendEmail(to, 'Assinatura Cancelada - CheckList App', html);
 };
 
 // Email de recuperacao de senha
@@ -384,7 +388,7 @@ export const sendPasswordReset = async (to, data) => {
 
   const html = baseTemplate(`
     <div class="header" style="background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);">
-      <h1>CheckList Pro</h1>
+      <h1>CheckList App</h1>
       <p>Recuperacao de Senha</p>
     </div>
     <div class="content">
@@ -414,7 +418,7 @@ export const sendPasswordReset = async (to, data) => {
     </div>
   `);
 
-  return sendEmail(to, 'Recuperacao de Senha - CheckList Pro', html);
+  return sendEmail(to, 'Recuperacao de Senha - CheckList App', html);
 };
 
 // Email de comprovante de checklist concluido
@@ -431,7 +435,7 @@ export const sendChecklistCertificate = async (to, data, imageBuffer) => {
 
   const html = baseTemplate(`
     <div class="header" style="background: linear-gradient(135deg, #6366f1 0%, #2dd4bf 100%);">
-      <h1>CheckList Pro</h1>
+      <h1>CheckList App</h1>
       <p>Checklist Concluido!</p>
     </div>
     <div class="content">
@@ -473,34 +477,59 @@ export const sendChecklistCertificate = async (to, data, imageBuffer) => {
 
 // Funcao principal de envio
 const sendEmail = async (to, subject, html) => {
-  const mailOptions = {
-    from: process.env.EMAIL_FROM || '"CheckList Pro" <noreply@checklist-pro.rhumarh.com>',
-    to,
-    subject,
-    html
-  };
-
-  if (!transporter) {
-    console.log('📧 [DEV] Email que seria enviado:');
-    console.log(`   Para: ${to}`);
-    console.log(`   Assunto: ${subject}`);
-    return { success: true, mode: 'development' };
+  const fromEmail = process.env.EMAIL_FROM || 'CheckList App <noreply@checklist-app.rhumarh.com>';
+  
+  // Prioridade 1: Resend (API HTTP - mais confiavel)
+  if (resend) {
+    try {
+      const { data, error } = await resend.emails.send({
+        from: fromEmail,
+        to: [to],
+        subject,
+        html
+      });
+      
+      if (error) {
+        console.error('❌ Erro Resend:', error);
+        return { success: false, error: error.message };
+      }
+      
+      console.log('📧 Email enviado via Resend:', data.id);
+      return { success: true, messageId: data.id };
+    } catch (error) {
+      console.error('❌ Erro ao enviar email via Resend:', error);
+      return { success: false, error: error.message };
+    }
   }
 
-  try {
-    const info = await transporter.sendMail(mailOptions);
-    console.log('📧 Email enviado:', info.messageId);
-    return { success: true, messageId: info.messageId };
-  } catch (error) {
-    console.error('❌ Erro ao enviar email:', error);
-    return { success: false, error: error.message };
+  // Prioridade 2: SMTP/Gmail
+  if (transporter) {
+    try {
+      const info = await transporter.sendMail({
+        from: fromEmail,
+        to,
+        subject,
+        html
+      });
+      console.log('📧 Email enviado via SMTP:', info.messageId);
+      return { success: true, messageId: info.messageId };
+    } catch (error) {
+      console.error('❌ Erro ao enviar email via SMTP:', error);
+      return { success: false, error: error.message };
+    }
   }
+
+  // Modo desenvolvimento - apenas loga
+  console.log('📧 [DEV] Email que seria enviado:');
+  console.log(`   Para: ${to}`);
+  console.log(`   Assunto: ${subject}`);
+  return { success: true, mode: 'development' };
 };
 
 // Funcao de envio com anexo
 const sendEmailWithAttachment = async (to, subject, html, imageBuffer, filename) => {
   const mailOptions = {
-    from: process.env.EMAIL_FROM || '"CheckList Pro" <noreply@checklist-pro.rhumarh.com>',
+    from: process.env.EMAIL_FROM || '"CheckList App" <noreply@checklist-app.rhumarh.com>',
     to,
     subject,
     html,

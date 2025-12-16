@@ -53,7 +53,7 @@ export default function MainLayout() {
               <CheckSquare className="w-6 h-6 text-white" />
             </div>
             <div>
-              <h1 className="text-xl font-bold text-white tracking-tight">CheckList Pro</h1>
+              <h1 className="text-xl font-bold text-white tracking-tight">CheckList App</h1>
               <p className="text-dark-400 text-xs">Powered by SO.RH.IA</p>
             </div>
           </Link>
@@ -147,7 +147,7 @@ export default function MainLayout() {
                     <CheckSquare className="w-6 h-6 text-white" />
                   </div>
                   <div>
-                    <h1 className="text-xl font-bold text-white tracking-tight">CheckList Pro</h1>
+                    <h1 className="text-xl font-bold text-white tracking-tight">CheckList App</h1>
                     <p className="text-dark-400 text-xs">Powered by SO.RH.IA</p>
                   </div>
                 </div>
@@ -227,7 +227,7 @@ export default function MainLayout() {
               <div className="w-9 h-9 bg-gradient-to-br from-primary-500 to-accent-teal rounded-lg flex items-center justify-center">
                 <CheckSquare className="w-5 h-5 text-white" />
               </div>
-              <span className="text-lg font-bold text-white tracking-tight">CheckList Pro</span>
+              <span className="text-lg font-bold text-white tracking-tight">CheckList App</span>
             </div>
 
             <div className="relative">

@@ -19,7 +19,7 @@ export default function Privacy() {
               <div className="w-10 h-10 bg-gradient-to-br from-primary-500 to-accent-teal rounded-xl flex items-center justify-center">
                 <CheckSquare className="w-5 h-5 text-white" />
               </div>
-              <span className="font-bold text-white">CheckList Pro</span>
+              <span className="font-bold text-white">CheckList App</span>
             </div>
           </div>
         </div>
@@ -44,7 +44,7 @@ export default function Privacy() {
           <div className="prose prose-invert max-w-none">
             <div className="bg-dark-800/50 border border-dark-700/50 rounded-2xl p-6 mb-8">
               <p className="text-dark-300 leading-relaxed">
-                A CheckList Pro está comprometida em proteger a privacidade e os dados pessoais 
+                A CheckList App está comprometida em proteger a privacidade e os dados pessoais 
                 de nossos usuários, em conformidade com a Lei Geral de Proteção de Dados (LGPD) - 
                 Lei nº 13.709/2018.
               </p>

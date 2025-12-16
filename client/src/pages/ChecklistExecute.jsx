@@ -272,7 +272,7 @@ export default function ChecklistExecute() {
       `Empresa: ${shareData.execution.companyName}\n` +
       `Executado por: ${shareData.execution.executedBy}\n` +
       `Conformidade: ${shareData.execution.completionRate}%\n\n` +
-      `Baixe a imagem do comprovante no CheckList Pro.`
+      `Baixe a imagem do comprovante no CheckList App.`
     )
     window.open(`https://wa.me/?text=${text}`, '_blank')
     toast.success('Abrindo WhatsApp...')

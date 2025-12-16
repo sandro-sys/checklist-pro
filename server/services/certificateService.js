@@ -5,7 +5,7 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Cores do tema CheckList Pro
+// Cores do tema CheckList App
 const COLORS = {
   background: '#0f1419',
   cardBg: '#1a1f26',
@@ -128,7 +128,7 @@ export async function generateCertificateImage(data) {
   // Subtítulo
   ctx.font = '14px Arial, sans-serif';
   ctx.fillStyle = COLORS.textMuted;
-  ctx.fillText('CheckList Pro', width / 2, y + 20);
+  ctx.fillText('CheckList App', width / 2, y + 20);
   y += 50;
 
   // ============ CARD PRINCIPAL ============
@@ -319,7 +319,7 @@ export async function generateCertificateImage(data) {
   y = height - 30;
   ctx.font = '11px Arial, sans-serif';
   ctx.fillStyle = COLORS.textDark;
-  ctx.fillText('Gerado automaticamente pelo CheckList Pro', width / 2, y);
+  ctx.fillText('Gerado automaticamente pelo CheckList App', width / 2, y);
 
   return canvas.toBuffer('image/png');
 }

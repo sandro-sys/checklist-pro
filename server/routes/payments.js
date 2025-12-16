@@ -125,7 +125,7 @@ router.post('/subscribe', authenticateToken, async (req, res) => {
 
     // Criar pre-approval (assinatura) usando fetch direto na API
     const subscriptionData = {
-      reason: `CheckList Pro - Plano ${plan.name}`,
+      reason: `CheckList App - Plano ${plan.name}`,
       auto_recurring: {
         frequency: 1,
         frequency_type: 'months',

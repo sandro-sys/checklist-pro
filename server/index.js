@@ -127,7 +127,7 @@ async function startServer() {
     
     app.listen(PORT, () => {
       console.log(`🚀 Servidor rodando na porta ${PORT}`);
-      console.log(`📋 CheckList Pro - Sistema de Gestão de Checklists`);
+      console.log(`📋 CheckList App - Sistema de Gestão de Checklists`);
       console.log(`🌐 Frontend: http://localhost:5173`);
       console.log(`🔧 Backend: http://localhost:${PORT}`);
     });
