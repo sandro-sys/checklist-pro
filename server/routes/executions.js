@@ -1,6 +1,6 @@
 import express from 'express';
 import { v4 as uuidv4 } from 'uuid';
-import { dbRunAsync, dbGetAsync, dbAllAsync } from '../database/init.js';
+import { dbRunAsync, dbGetAsync, dbAllAsync, isProduction } from '../database/init.js';
 import { authenticateToken } from '../middleware/auth.js';
 import { generateCertificateImage } from '../services/certificateService.js';
 import { sendChecklistCertificate } from '../services/emailService.js';
@@ -564,39 +564,85 @@ router.get('/stats/:companyId', authenticateToken, async (req, res) => {
       ORDER BY execution_count DESC
     `, [startDate, companyId]);
 
-    // Tempo médio de execução (em minutos)
-    const avgExecutionTime = await dbGetAsync(`
-      SELECT AVG(
-        (julianday(e.completed_at) - julianday(e.executed_at)) * 24 * 60
-      ) as avg_minutes
-      FROM checklist_executions e
-      JOIN checklists c ON e.checklist_id = c.id
-      WHERE c.company_id = ? AND e.executed_at >= ? AND e.status = 'completed' AND e.completed_at IS NOT NULL
-    `, [companyId, startDate]);
+    // Tempo médio de execução (em minutos) - compatível com PostgreSQL e SQLite
+    let avgExecutionTime;
+    if (isProduction) {
+      // PostgreSQL
+      avgExecutionTime = await dbGetAsync(`
+        SELECT AVG(
+          EXTRACT(EPOCH FROM (e.completed_at::timestamp - e.executed_at::timestamp)) / 60
+        ) as avg_minutes
+        FROM checklist_executions e
+        JOIN checklists c ON e.checklist_id = c.id
+        WHERE c.company_id = ? AND e.executed_at >= ? AND e.status = 'completed' AND e.completed_at IS NOT NULL
+      `, [companyId, startDate]);
+    } else {
+      // SQLite
+      avgExecutionTime = await dbGetAsync(`
+        SELECT AVG(
+          (julianday(e.completed_at) - julianday(e.executed_at)) * 24 * 60
+        ) as avg_minutes
+        FROM checklist_executions e
+        JOIN checklists c ON e.checklist_id = c.id
+        WHERE c.company_id = ? AND e.executed_at >= ? AND e.status = 'completed' AND e.completed_at IS NOT NULL
+      `, [companyId, startDate]);
+    }
 
-    // Execuções por hora do dia (horários de pico)
-    const executionsByHour = await dbAllAsync(`
-      SELECT 
-        CAST(strftime('%H', e.executed_at) AS INTEGER) as hour,
-        COUNT(*) as count
-      FROM checklist_executions e
-      JOIN checklists c ON e.checklist_id = c.id
-      WHERE c.company_id = ? AND e.executed_at >= ?
-      GROUP BY hour
-      ORDER BY hour
-    `, [companyId, startDate]);
+    // Execuções por hora do dia (horários de pico) - compatível com PostgreSQL e SQLite
+    let executionsByHour;
+    if (isProduction) {
+      // PostgreSQL
+      executionsByHour = await dbAllAsync(`
+        SELECT 
+          EXTRACT(HOUR FROM e.executed_at::timestamp)::integer as hour,
+          COUNT(*) as count
+        FROM checklist_executions e
+        JOIN checklists c ON e.checklist_id = c.id
+        WHERE c.company_id = ? AND e.executed_at >= ?
+        GROUP BY hour
+        ORDER BY hour
+      `, [companyId, startDate]);
+    } else {
+      // SQLite
+      executionsByHour = await dbAllAsync(`
+        SELECT 
+          CAST(strftime('%H', e.executed_at) AS INTEGER) as hour,
+          COUNT(*) as count
+        FROM checklist_executions e
+        JOIN checklists c ON e.checklist_id = c.id
+        WHERE c.company_id = ? AND e.executed_at >= ?
+        GROUP BY hour
+        ORDER BY hour
+      `, [companyId, startDate]);
+    }
 
-    // Execuções por dia da semana
-    const executionsByWeekday = await dbAllAsync(`
-      SELECT 
-        CAST(strftime('%w', e.executed_at) AS INTEGER) as weekday,
-        COUNT(*) as count
-      FROM checklist_executions e
-      JOIN checklists c ON e.checklist_id = c.id
-      WHERE c.company_id = ? AND e.executed_at >= ?
-      GROUP BY weekday
-      ORDER BY weekday
-    `, [companyId, startDate]);
+    // Execuções por dia da semana - compatível com PostgreSQL e SQLite
+    let executionsByWeekday;
+    if (isProduction) {
+      // PostgreSQL (0 = domingo, 6 = sábado)
+      executionsByWeekday = await dbAllAsync(`
+        SELECT 
+          EXTRACT(DOW FROM e.executed_at::timestamp)::integer as weekday,
+          COUNT(*) as count
+        FROM checklist_executions e
+        JOIN checklists c ON e.checklist_id = c.id
+        WHERE c.company_id = ? AND e.executed_at >= ?
+        GROUP BY weekday
+        ORDER BY weekday
+      `, [companyId, startDate]);
+    } else {
+      // SQLite
+      executionsByWeekday = await dbAllAsync(`
+        SELECT 
+          CAST(strftime('%w', e.executed_at) AS INTEGER) as weekday,
+          COUNT(*) as count
+        FROM checklist_executions e
+        JOIN checklists c ON e.checklist_id = c.id
+        WHERE c.company_id = ? AND e.executed_at >= ?
+        GROUP BY weekday
+        ORDER BY weekday
+      `, [companyId, startDate]);
+    }
 
     // Taxa de conformidade média (itens marcados / total de itens)
     const conformityStats = await dbGetAsync(`
@@ -668,10 +714,11 @@ router.get('/stats/:companyId/image', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'Empresa não encontrada' });
     }
 
-    // Buscar estatísticas (reutilizando a lógica acima)
+    // Buscar estatísticas
     const startDate = new Date(Date.now() - parseInt(period) * 24 * 60 * 60 * 1000).toISOString();
     const todayStart = new Date().toISOString().split('T')[0];
 
+    // Queries básicas (compatíveis com ambos os bancos)
     const [
       totalExecutions,
       completedExecutions,
@@ -679,22 +726,35 @@ router.get('/stats/:companyId/image', authenticateToken, async (req, res) => {
       inProgressExecutions,
       topChecklists,
       topUsers,
-      executionsByHour,
-      executionsByWeekday,
-      avgExecutionTime,
       conformityStats
     ] = await Promise.all([
       dbGetAsync(`SELECT COUNT(*) as count FROM checklist_executions e JOIN checklists c ON e.checklist_id = c.id WHERE c.company_id = ? AND e.executed_at >= ?`, [companyId, startDate]),
       dbGetAsync(`SELECT COUNT(*) as count FROM checklist_executions e JOIN checklists c ON e.checklist_id = c.id WHERE c.company_id = ? AND e.executed_at >= ? AND e.status = 'completed'`, [companyId, startDate]),
       dbGetAsync(`SELECT COUNT(*) as count FROM checklist_executions e JOIN checklists c ON e.checklist_id = c.id WHERE c.company_id = ? AND DATE(e.executed_at) = ?`, [companyId, todayStart]),
       dbGetAsync(`SELECT COUNT(*) as count FROM checklist_executions e JOIN checklists c ON e.checklist_id = c.id WHERE c.company_id = ? AND e.status = 'in_progress'`, [companyId]),
-      dbAllAsync(`SELECT c.title, COUNT(e.id) as execution_count FROM checklists c LEFT JOIN checklist_executions e ON c.id = e.checklist_id AND e.executed_at >= ? WHERE c.company_id = ? GROUP BY c.id ORDER BY execution_count DESC LIMIT 5`, [startDate, companyId]),
-      dbAllAsync(`SELECT u.name, COUNT(e.id) as execution_count FROM users u JOIN checklist_executions e ON e.executed_by = u.id JOIN checklists c ON e.checklist_id = c.id WHERE c.company_id = ? AND e.executed_at >= ? GROUP BY u.id ORDER BY execution_count DESC LIMIT 5`, [companyId, startDate]),
-      dbAllAsync(`SELECT CAST(strftime('%H', e.executed_at) AS INTEGER) as hour, COUNT(*) as count FROM checklist_executions e JOIN checklists c ON e.checklist_id = c.id WHERE c.company_id = ? AND e.executed_at >= ? GROUP BY hour ORDER BY hour`, [companyId, startDate]),
-      dbAllAsync(`SELECT CAST(strftime('%w', e.executed_at) AS INTEGER) as weekday, COUNT(*) as count FROM checklist_executions e JOIN checklists c ON e.checklist_id = c.id WHERE c.company_id = ? AND e.executed_at >= ? GROUP BY weekday ORDER BY weekday`, [companyId, startDate]),
-      dbGetAsync(`SELECT AVG((julianday(e.completed_at) - julianday(e.executed_at)) * 24 * 60) as avg_minutes FROM checklist_executions e JOIN checklists c ON e.checklist_id = c.id WHERE c.company_id = ? AND e.executed_at >= ? AND e.status = 'completed' AND e.completed_at IS NOT NULL`, [companyId, startDate]),
+      dbAllAsync(`SELECT c.title, COUNT(e.id) as execution_count FROM checklists c LEFT JOIN checklist_executions e ON c.id = e.checklist_id AND e.executed_at >= ? WHERE c.company_id = ? GROUP BY c.id, c.title ORDER BY execution_count DESC LIMIT 5`, [startDate, companyId]),
+      dbAllAsync(`SELECT u.name, COUNT(e.id) as execution_count FROM users u JOIN checklist_executions e ON e.executed_by = u.id JOIN checklists c ON e.checklist_id = c.id WHERE c.company_id = ? AND e.executed_at >= ? GROUP BY u.id, u.name ORDER BY execution_count DESC LIMIT 5`, [companyId, startDate]),
       dbGetAsync(`SELECT SUM(CASE WHEN er.is_checked = 1 THEN 1 ELSE 0 END) as checked_count, SUM(CASE WHEN er.is_not_applicable = 1 THEN 1 ELSE 0 END) as na_count, COUNT(er.id) as total_responses FROM execution_responses er JOIN checklist_executions e ON er.execution_id = e.id JOIN checklists c ON e.checklist_id = c.id WHERE c.company_id = ? AND e.executed_at >= ? AND e.status = 'completed'`, [companyId, startDate])
     ]);
+
+    // Queries específicas por banco de dados
+    let executionsByHour, executionsByWeekday, avgExecutionTime;
+    
+    if (isProduction) {
+      // PostgreSQL
+      [executionsByHour, executionsByWeekday, avgExecutionTime] = await Promise.all([
+        dbAllAsync(`SELECT EXTRACT(HOUR FROM e.executed_at::timestamp)::integer as hour, COUNT(*) as count FROM checklist_executions e JOIN checklists c ON e.checklist_id = c.id WHERE c.company_id = ? AND e.executed_at >= ? GROUP BY hour ORDER BY hour`, [companyId, startDate]),
+        dbAllAsync(`SELECT EXTRACT(DOW FROM e.executed_at::timestamp)::integer as weekday, COUNT(*) as count FROM checklist_executions e JOIN checklists c ON e.checklist_id = c.id WHERE c.company_id = ? AND e.executed_at >= ? GROUP BY weekday ORDER BY weekday`, [companyId, startDate]),
+        dbGetAsync(`SELECT AVG(EXTRACT(EPOCH FROM (e.completed_at::timestamp - e.executed_at::timestamp)) / 60) as avg_minutes FROM checklist_executions e JOIN checklists c ON e.checklist_id = c.id WHERE c.company_id = ? AND e.executed_at >= ? AND e.status = 'completed' AND e.completed_at IS NOT NULL`, [companyId, startDate])
+      ]);
+    } else {
+      // SQLite
+      [executionsByHour, executionsByWeekday, avgExecutionTime] = await Promise.all([
+        dbAllAsync(`SELECT CAST(strftime('%H', e.executed_at) AS INTEGER) as hour, COUNT(*) as count FROM checklist_executions e JOIN checklists c ON e.checklist_id = c.id WHERE c.company_id = ? AND e.executed_at >= ? GROUP BY hour ORDER BY hour`, [companyId, startDate]),
+        dbAllAsync(`SELECT CAST(strftime('%w', e.executed_at) AS INTEGER) as weekday, COUNT(*) as count FROM checklist_executions e JOIN checklists c ON e.checklist_id = c.id WHERE c.company_id = ? AND e.executed_at >= ? GROUP BY weekday ORDER BY weekday`, [companyId, startDate]),
+        dbGetAsync(`SELECT AVG((julianday(e.completed_at) - julianday(e.executed_at)) * 24 * 60) as avg_minutes FROM checklist_executions e JOIN checklists c ON e.checklist_id = c.id WHERE c.company_id = ? AND e.executed_at >= ? AND e.status = 'completed' AND e.completed_at IS NOT NULL`, [companyId, startDate])
+      ]);
+    }
 
     const completionRate = totalExecutions.count > 0 ? Math.round((completedExecutions.count / totalExecutions.count) * 100) : 0;
     const avgExecutionsPerDay = parseInt(period) > 0 ? Math.round(totalExecutions.count / parseInt(period) * 10) / 10 : 0;

@@ -13,7 +13,7 @@ const dbPath = join(dataDir, 'checklist.db');
 let db = null;
 let SQL = null;
 let pgPool = null;
-const isProduction = process.env.NODE_ENV === 'production' || process.env.DATABASE_URL;
+export const isProduction = process.env.NODE_ENV === 'production' || process.env.DATABASE_URL;
 
 export async function getDb() {
   if (isProduction) {
