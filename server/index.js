@@ -83,6 +83,41 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// Formulário de contato
+app.post('/api/contact', async (req, res) => {
+  try {
+    const { name, email, phone, subject, message } = req.body;
+
+    if (!name || !email || !phone || !subject || !message) {
+      return res.status(400).json({ error: 'Todos os campos são obrigatórios' });
+    }
+
+    // Salvar no banco de dados
+    const { v4: uuidv4 } = await import('uuid');
+    const id = uuidv4();
+    
+    await dbRunAsync(`
+      INSERT INTO contact_messages (id, name, email, phone, subject, message, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `, [id, name, email, phone, subject, message, new Date().toISOString()]);
+
+    // Log para acompanhamento
+    console.log('📩 Nova mensagem de contato:');
+    console.log(`   Nome: ${name}`);
+    console.log(`   Email: ${email}`);
+    console.log(`   Telefone: ${phone}`);
+    console.log(`   Assunto: ${subject}`);
+    console.log(`   Mensagem: ${message.substring(0, 100)}...`);
+
+    // TODO: Enviar email de notificação para o admin
+
+    res.json({ success: true, message: 'Mensagem enviada com sucesso!' });
+  } catch (error) {
+    console.error('Erro ao salvar mensagem de contato:', error);
+    res.status(500).json({ error: 'Erro ao enviar mensagem' });
+  }
+});
+
 // Endpoint para marcar usuarios existentes para trocar senha (executar uma vez)
 app.post('/api/admin/force-password-migration', async (req, res) => {
   try {

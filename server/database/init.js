@@ -257,6 +257,19 @@ async function initPostgres() {
     )
   `);
 
+  await pgPool.query(`
+    CREATE TABLE IF NOT EXISTS contact_messages (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      email TEXT NOT NULL,
+      phone TEXT NOT NULL,
+      subject TEXT NOT NULL,
+      message TEXT NOT NULL,
+      read_at TIMESTAMP,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
   console.log('✅ Tabelas PostgreSQL criadas com sucesso!');
 }
 
@@ -470,6 +483,19 @@ async function initSQLite() {
       token TEXT NOT NULL,
       expires_at TEXT NOT NULL,
       used_at TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS contact_messages (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      email TEXT NOT NULL,
+      phone TEXT NOT NULL,
+      subject TEXT NOT NULL,
+      message TEXT NOT NULL,
+      read_at TEXT,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP
     )
   `);
