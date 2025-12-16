@@ -32,7 +32,8 @@ export async function generateCertificateImage(data) {
     checklistTitle,
     companyName,
     executedBy,
-    executedAt,
+    startedAt,
+    completedAt,
     items,
     totalItems,
     checkedItems,
@@ -40,12 +41,23 @@ export async function generateCertificateImage(data) {
     completionRate
   } = data;
 
+  // Calcular duração
+  const startTime = new Date(startedAt);
+  const endTime = completedAt ? new Date(completedAt) : new Date();
+  const durationMs = endTime - startTime;
+  const durationMinutes = Math.floor(durationMs / 60000);
+  const durationHours = Math.floor(durationMinutes / 60);
+  const remainingMinutes = durationMinutes % 60;
+  const durationStr = durationHours > 0 
+    ? `${durationHours}h ${remainingMinutes}min`
+    : `${durationMinutes}min`;
+
   // Dimensões da imagem
   const width = 800;
   const padding = 40;
   const headerHeight = 220; // Header com badge e título
   const itemHeight = 45; // Altura de cada item
-  const cardInfoHeight = 140; // Info do checklist dentro do card (título, empresa, data, etc)
+  const cardInfoHeight = 200; // Info do checklist dentro do card (título, empresa, início, fim, duração, etc)
   const resultCardsHeight = 100; // Cards de resultado (Concluídos, N/A, Conformidade)
   const progressBarHeight = 60; // Barra de progresso + texto
   const footerHeight = 60; // Rodapé
@@ -170,15 +182,34 @@ export async function generateCertificateImage(data) {
   ctx.fillText(`Executado por: ${executedBy}`, infoX, y);
   y += 22;
 
-  // Data
-  const dateStr = new Date(executedAt).toLocaleString('pt-BR', {
+  // Hora de início
+  const startStr = new Date(startedAt).toLocaleString('pt-BR', {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
     hour: '2-digit',
     minute: '2-digit'
   });
-  ctx.fillText(`Data: ${dateStr}`, infoX, y);
+  ctx.fillText(`Início: ${startStr}`, infoX, y);
+  y += 22;
+
+  // Hora de fim
+  if (completedAt) {
+    const endStr = new Date(completedAt).toLocaleString('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+    ctx.fillText(`Fim: ${endStr}`, infoX, y);
+    y += 22;
+  }
+
+  // Duração
+  ctx.fillStyle = COLORS.accent;
+  ctx.fillText(`⏱ Duração: ${durationStr}`, infoX, y);
+  ctx.fillStyle = COLORS.textMuted;
   y += 35;
 
   // Linha divisória
