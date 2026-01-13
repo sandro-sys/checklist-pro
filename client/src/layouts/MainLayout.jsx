@@ -15,20 +15,29 @@ import {
   ChevronDown,
   User,
   Zap,
-  FileText
+  FileText,
+  Crown
 } from 'lucide-react'
 import { useAuthStore } from '../store/authStore'
 
-const menuItems = [
-  { path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-  { path: '/checklists', icon: ClipboardList, label: 'Checklists' },
-  { path: '/team', icon: Users, label: 'Equipe' },
-  { path: '/company', icon: Building2, label: 'Empresa' },
-  { path: '/quick-actions', icon: Zap, label: 'Acoes Rapidas' },
-  { path: '/reports', icon: FileText, label: 'Relatorios' },
-  { path: '/pricing', icon: CreditCard, label: 'Planos' },
-  { path: '/subscriptions', icon: CreditCard, label: 'Assinaturas' },
-]
+const getMenuItems = (isMaster) => {
+  const items = [
+    { path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+    { path: '/checklists', icon: ClipboardList, label: 'Checklists' },
+    { path: '/team', icon: Users, label: 'Equipe' },
+    { path: '/company', icon: Building2, label: 'Empresa' },
+    { path: '/quick-actions', icon: Zap, label: 'Acoes Rapidas' },
+    { path: '/reports', icon: FileText, label: 'Relatorios' },
+    { path: '/pricing', icon: CreditCard, label: 'Planos' },
+    { path: '/subscriptions', icon: CreditCard, label: 'Assinaturas' },
+  ]
+  
+  if (isMaster) {
+    items.push({ path: '/admin', icon: Crown, label: 'Painel Master', isMaster: true })
+  }
+  
+  return items
+}
 
 export default function MainLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -61,7 +70,7 @@ export default function MainLayout() {
 
         {/* Navigation */}
         <nav className="flex-1 p-4 space-y-1">
-          {menuItems.map((item) => {
+          {getMenuItems(user?.is_master).map((item) => {
             const isActive = location.pathname === item.path
             return (
               <Link
@@ -69,8 +78,12 @@ export default function MainLayout() {
                 to={item.path}
                 className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${
                   isActive 
-                    ? 'bg-primary-500/10 text-primary-400 border border-primary-500/20' 
-                    : 'text-dark-300 hover:bg-dark-800 hover:text-white'
+                    ? item.isMaster 
+                      ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                      : 'bg-primary-500/10 text-primary-400 border border-primary-500/20' 
+                    : item.isMaster
+                      ? 'text-amber-400/70 hover:bg-amber-500/10 hover:text-amber-400'
+                      : 'text-dark-300 hover:bg-dark-800 hover:text-white'
                 }`}
               >
                 <item.icon className="w-5 h-5" />
@@ -155,7 +168,7 @@ export default function MainLayout() {
 
               {/* Navigation */}
               <nav className="flex-1 p-4 space-y-1">
-                {menuItems.map((item) => {
+                {getMenuItems(user?.is_master).map((item) => {
                   const isActive = location.pathname === item.path
                   return (
                     <Link
@@ -164,8 +177,12 @@ export default function MainLayout() {
                       onClick={() => setSidebarOpen(false)}
                       className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
                         isActive 
-                          ? 'bg-primary-500/10 text-primary-400' 
-                          : 'text-dark-300 hover:bg-dark-800 hover:text-white'
+                          ? item.isMaster 
+                            ? 'bg-amber-500/10 text-amber-400'
+                            : 'bg-primary-500/10 text-primary-400' 
+                          : item.isMaster
+                            ? 'text-amber-400/70 hover:bg-amber-500/10 hover:text-amber-400'
+                            : 'text-dark-300 hover:bg-dark-800 hover:text-white'
                       }`}
                     >
                       <item.icon className="w-5 h-5" />

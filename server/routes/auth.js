@@ -148,7 +148,8 @@ router.post('/login', async (req, res) => {
         email: user.email, 
         name: user.name, 
         role: user.role,
-        company_id: user.company_id 
+        company_id: user.company_id,
+        is_master: user.is_master === 1
       },
       process.env.JWT_SECRET || 'default_secret',
       { expiresIn: '15m' }
@@ -181,7 +182,8 @@ router.post('/login', async (req, res) => {
         role: user.role,
         company_id: user.company_id,
         company_name: user.company_name,
-        must_change_password: user.must_change_password === 1
+        must_change_password: user.must_change_password === 1,
+        is_master: user.is_master === 1
       },
       accessToken,
       refreshToken
@@ -479,13 +481,24 @@ router.post('/refresh', async (req, res) => {
           email: user.email, 
           name: user.name, 
           role: user.role,
-          company_id: user.company_id 
+          company_id: user.company_id,
+          is_master: user.is_master === 1
         },
         process.env.JWT_SECRET || 'default_secret',
         { expiresIn: '15m' }
       );
 
-      res.json({ accessToken: newAccessToken });
+      res.json({ 
+        accessToken: newAccessToken,
+        user: {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          role: user.role,
+          company_id: user.company_id,
+          is_master: user.is_master === 1
+        }
+      });
     });
   } catch (error) {
     console.error('Erro no refresh:', error);

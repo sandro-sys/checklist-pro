@@ -16,9 +16,10 @@ import usersRoutes from './routes/users.js';
 import rolesRoutes from './routes/roles.js';
 import paymentsRoutes from './routes/payments.js';
 import uploadsRoutes from './routes/uploads.js';
+import adminRoutes from './routes/admin.js';
 
 // Database
-import { initDatabase, dbRunAsync } from './database/init.js';
+import { initDatabase, dbRunAsync, dbGetAsync } from './database/init.js';
 
 dotenv.config();
 
@@ -82,6 +83,7 @@ app.use('/api/users', usersRoutes);
 app.use('/api/roles', rolesRoutes);
 app.use('/api/payments', paymentsRoutes);
 app.use('/api/uploads', uploadsRoutes);
+app.use('/api/admin', adminRoutes);
 
 // Health check (tambem usado pelo cron para manter servidor acordado)
 app.get('/api/health', (req, res) => {
@@ -143,6 +145,40 @@ app.post('/api/admin/force-password-migration', async (req, res) => {
   } catch (error) {
     console.error('Erro na migracao:', error);
     res.status(500).json({ error: 'Erro ao processar migracao' });
+  }
+});
+
+// Endpoint para criar primeiro usuario master (executar uma vez)
+app.post('/api/admin/create-master', async (req, res) => {
+  try {
+    const { email, secret } = req.body;
+    
+    // Verificar secret para proteger o endpoint
+    if (secret !== process.env.ADMIN_SECRET && secret !== 'create-master-2024') {
+      return res.status(403).json({ error: 'Acesso negado' });
+    }
+    
+    if (!email) {
+      return res.status(400).json({ error: 'Email é obrigatório' });
+    }
+    
+    // Verificar se usuario existe
+    const user = await dbGetAsync(`SELECT id, email, name FROM users WHERE email = ?`, [email.toLowerCase()]);
+    
+    if (!user) {
+      return res.status(404).json({ error: 'Usuário não encontrado' });
+    }
+    
+    // Tornar master
+    await dbRunAsync(`UPDATE users SET is_master = 1 WHERE id = ?`, [user.id]);
+    
+    res.json({ 
+      success: true, 
+      message: `Usuário ${user.name} (${user.email}) agora é master!` 
+    });
+  } catch (error) {
+    console.error('Erro ao criar master:', error);
+    res.status(500).json({ error: 'Erro ao criar master' });
   }
 });
 

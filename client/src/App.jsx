@@ -26,6 +26,7 @@ import Subscriptions from './pages/Subscriptions'
 import Privacy from './pages/Privacy'
 import Terms from './pages/Terms'
 import ChangePassword from './pages/ChangePassword'
+import AdminDashboard from './pages/AdminDashboard'
 
 // Protected Route Component
 function ProtectedRoute({ children }) {
@@ -129,6 +130,7 @@ function App() {
         <Route path="/reports" element={<Reports />} />
         <Route path="/pricing" element={<Pricing />} />
         <Route path="/subscriptions" element={<Subscriptions />} />
+        <Route path="/admin" element={<AdminDashboard />} />
       </Route>
       
       {/* 404 */}

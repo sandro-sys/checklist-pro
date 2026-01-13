@@ -92,6 +92,13 @@ async function initPostgres() {
     // Coluna ja existe
   }
 
+  // Migracao: adicionar coluna is_master para super admin
+  try {
+    await pgPool.query(`ALTER TABLE users ADD COLUMN is_master INTEGER DEFAULT 0`);
+  } catch (e) {
+    // Coluna ja existe
+  }
+
   await pgPool.query(`
     CREATE TABLE IF NOT EXISTS companies (
       id TEXT PRIMARY KEY,
@@ -332,10 +339,18 @@ async function initSQLite() {
       lgpd_consent_date TEXT,
       last_login TEXT,
       must_change_password INTEGER DEFAULT 0,
+      is_master INTEGER DEFAULT 0,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT DEFAULT CURRENT_TIMESTAMP
     )
   `);
+
+  // Migracao: adicionar coluna is_master para super admin
+  try {
+    db.run(`ALTER TABLE users ADD COLUMN is_master INTEGER DEFAULT 0`);
+  } catch (e) {
+    // Coluna ja existe
+  }
 
   db.run(`
     CREATE TABLE IF NOT EXISTS companies (

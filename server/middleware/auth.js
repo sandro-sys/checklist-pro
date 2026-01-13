@@ -15,9 +15,9 @@ export function authenticateToken(req, res, next) {
     }
     
     try {
-      // Buscar dados atualizados do usuário no banco (incluindo company_id)
+      // Buscar dados atualizados do usuário no banco (incluindo company_id e is_master)
       const user = await dbGetAsync(`
-        SELECT u.id, u.email, u.name, u.role_type, u.company_id,
+        SELECT u.id, u.email, u.name, u.role_type, u.company_id, u.is_master,
                c.id as owner_company_id
         FROM users u
         LEFT JOIN companies c ON c.owner_id = u.id
@@ -31,7 +31,8 @@ export function authenticateToken(req, res, next) {
       // Usar company_id do usuário ou da empresa que ele é dono
       req.user = {
         ...decoded,
-        company_id: user.company_id || user.owner_company_id
+        company_id: user.company_id || user.owner_company_id,
+        is_master: user.is_master === 1
       };
       
       next();
@@ -63,6 +64,11 @@ export function requireCompanyAccess(req, res, next) {
     return next();
   }
 
+  // Master tem acesso a todas as empresas
+  if (req.user.is_master) {
+    return next();
+  }
+
   if (req.user.role === 'admin') {
     return next();
   }
@@ -71,5 +77,18 @@ export function requireCompanyAccess(req, res, next) {
     return res.status(403).json({ error: 'Acesso negado a esta empresa' });
   }
 
+  next();
+}
+
+// Middleware para verificar se é usuário master
+export function requireMaster(req, res, next) {
+  if (!req.user) {
+    return res.status(401).json({ error: 'Não autenticado' });
+  }
+  
+  if (!req.user.is_master) {
+    return res.status(403).json({ error: 'Acesso restrito a administradores master' });
+  }
+  
   next();
 }

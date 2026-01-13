@@ -82,13 +82,16 @@ export const useAuthStore = create(
 
       refreshAccessToken: async () => {
         try {
-          const { refreshToken } = get()
+          const { refreshToken, user: currentUser } = get()
           if (!refreshToken) throw new Error('No refresh token')
           
           const response = await api.post('/auth/refresh', { refreshToken })
-          const { accessToken } = response.data
+          const { accessToken, user: updatedUser } = response.data
           
-          set({ accessToken })
+          set({ 
+            accessToken,
+            user: updatedUser ? { ...currentUser, ...updatedUser } : currentUser
+          })
           api.defaults.headers.common['Authorization'] = `Bearer ${accessToken}`
           
           return accessToken
