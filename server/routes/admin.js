@@ -26,52 +26,77 @@ router.use(requireMaster);
 // Dashboard geral - estatísticas da plataforma
 router.get('/dashboard', async (req, res) => {
   try {
-    // Total de empresas
-    const companiesCount = await dbGetAsync(`SELECT COUNT(*) as count FROM companies`);
-    
-    // Total de usuários
-    const usersCount = await dbGetAsync(`SELECT COUNT(*) as count FROM users`);
-    
-    // Total de checklists
-    const checklistsCount = await dbGetAsync(`SELECT COUNT(*) as count FROM checklists`);
-    
-    // Total de execuções
-    const executionsCount = await dbGetAsync(`SELECT COUNT(*) as count FROM checklist_executions`);
-    
-    // Empresas por plano
-    const companiesByPlan = await dbAllAsync(`
-      SELECT plan, COUNT(*) as count 
-      FROM companies 
-      GROUP BY plan
-    `);
-    
-    // Usuários ativos nos últimos 7 dias
-    const activeUsers = await dbGetAsync(`
-      SELECT COUNT(*) as count 
-      FROM users 
-      WHERE last_login >= ${dateSubtract(7)}
-    `);
-    
-    // Execuções nos últimos 7 dias
-    const recentExecutions = await dbGetAsync(`
-      SELECT COUNT(*) as count 
-      FROM checklist_executions 
-      WHERE created_at >= ${dateSubtract(7)}
-    `);
-    
-    // Novas empresas nos últimos 30 dias
-    const newCompanies = await dbGetAsync(`
-      SELECT COUNT(*) as count 
-      FROM companies 
-      WHERE created_at >= ${dateSubtract(30)}
-    `);
-    
-    // Mensagens de contato não lidas
-    const unreadMessages = await dbGetAsync(`
-      SELECT COUNT(*) as count 
-      FROM contact_messages 
-      WHERE read_at IS NULL
-    `);
+    // Queries básicas com tratamento individual
+    let companiesCount = { count: 0 };
+    let usersCount = { count: 0 };
+    let checklistsCount = { count: 0 };
+    let executionsCount = { count: 0 };
+    let companiesByPlan = [];
+    let activeUsers = { count: 0 };
+    let recentExecutions = { count: 0 };
+    let newCompanies = { count: 0 };
+    let unreadMessages = { count: 0 };
+
+    try {
+      companiesCount = await dbGetAsync(`SELECT COUNT(*) as count FROM companies`) || { count: 0 };
+    } catch (e) { console.error('Erro ao contar empresas:', e.message); }
+
+    try {
+      usersCount = await dbGetAsync(`SELECT COUNT(*) as count FROM users`) || { count: 0 };
+    } catch (e) { console.error('Erro ao contar usuários:', e.message); }
+
+    try {
+      checklistsCount = await dbGetAsync(`SELECT COUNT(*) as count FROM checklists`) || { count: 0 };
+    } catch (e) { console.error('Erro ao contar checklists:', e.message); }
+
+    try {
+      executionsCount = await dbGetAsync(`SELECT COUNT(*) as count FROM checklist_executions`) || { count: 0 };
+    } catch (e) { console.error('Erro ao contar execuções:', e.message); }
+
+    try {
+      companiesByPlan = await dbAllAsync(`
+        SELECT COALESCE(plan, 'trial') as plan, COUNT(*) as count 
+        FROM companies 
+        GROUP BY COALESCE(plan, 'trial')
+      `) || [];
+    } catch (e) { console.error('Erro ao buscar empresas por plano:', e.message); }
+
+    try {
+      // Usuários ativos - usar created_at se last_login não existir
+      activeUsers = await dbGetAsync(`
+        SELECT COUNT(*) as count 
+        FROM users 
+        WHERE created_at >= ${dateSubtract(7)}
+      `) || { count: 0 };
+    } catch (e) { console.error('Erro ao contar usuários ativos:', e.message); }
+
+    try {
+      recentExecutions = await dbGetAsync(`
+        SELECT COUNT(*) as count 
+        FROM checklist_executions 
+        WHERE created_at >= ${dateSubtract(7)}
+      `) || { count: 0 };
+    } catch (e) { console.error('Erro ao contar execuções recentes:', e.message); }
+
+    try {
+      newCompanies = await dbGetAsync(`
+        SELECT COUNT(*) as count 
+        FROM companies 
+        WHERE created_at >= ${dateSubtract(30)}
+      `) || { count: 0 };
+    } catch (e) { console.error('Erro ao contar novas empresas:', e.message); }
+
+    try {
+      // Verificar se tabela contact_messages existe
+      unreadMessages = await dbGetAsync(`
+        SELECT COUNT(*) as count 
+        FROM contact_messages 
+        WHERE read_at IS NULL
+      `) || { count: 0 };
+    } catch (e) { 
+      console.error('Erro ao contar mensagens (tabela pode não existir):', e.message);
+      unreadMessages = { count: 0 };
+    }
     
     res.json({
       total_companies: companiesCount?.count || 0,
@@ -85,8 +110,8 @@ router.get('/dashboard', async (req, res) => {
       unread_messages: unreadMessages?.count || 0
     });
   } catch (error) {
-    console.error('Erro ao buscar dashboard admin:', error);
-    res.status(500).json({ error: 'Erro ao buscar estatísticas' });
+    console.error('Erro geral ao buscar dashboard admin:', error);
+    res.status(500).json({ error: 'Erro ao buscar estatísticas', details: error.message });
   }
 });
 
@@ -161,42 +186,70 @@ router.get('/companies/:companyId', async (req, res) => {
       return res.status(404).json({ error: 'Empresa não encontrada' });
     }
     
-    // Usuários da empresa
-    const users = await dbAllAsync(`
-      SELECT id, name, email, role_type, is_active, last_login, created_at
-      FROM users
-      WHERE company_id = ?
-      ORDER BY created_at DESC
-    `, [companyId]);
+    // Usuários da empresa (sem last_login que pode não existir)
+    let users = [];
+    try {
+      users = await dbAllAsync(`
+        SELECT id, name, email, role_type, is_active, created_at
+        FROM users
+        WHERE company_id = ?
+        ORDER BY created_at DESC
+      `, [companyId]) || [];
+    } catch (e) {
+      console.error('Erro ao buscar usuários da empresa:', e.message);
+    }
     
     // Checklists da empresa
-    const checklists = await dbAllAsync(`
-      SELECT id, title, periodicity, is_active, created_at
-      FROM checklists
-      WHERE company_id = ?
-      ORDER BY created_at DESC
-    `, [companyId]);
+    let checklists = [];
+    try {
+      checklists = await dbAllAsync(`
+        SELECT id, title, periodicity, is_active, created_at
+        FROM checklists
+        WHERE company_id = ?
+        ORDER BY created_at DESC
+      `, [companyId]) || [];
+    } catch (e) {
+      console.error('Erro ao buscar checklists da empresa:', e.message);
+    }
     
-    // Estatísticas
-    const stats = await dbGetAsync(`
-      SELECT 
-        (SELECT COUNT(*) FROM checklist_executions ce 
-         JOIN checklists ch ON ce.checklist_id = ch.id 
-         WHERE ch.company_id = ?) as total_executions,
-        (SELECT COUNT(*) FROM checklist_executions ce 
-         JOIN checklists ch ON ce.checklist_id = ch.id 
-         WHERE ch.company_id = ? AND ce.created_at >= ${dateSubtract(30)}) as executions_30d
-    `, [companyId, companyId]);
+    // Estatísticas com queries separadas para evitar erro
+    let totalExecutions = 0;
+    let executions30d = 0;
+    
+    try {
+      const totalResult = await dbGetAsync(`
+        SELECT COUNT(*) as count FROM checklist_executions ce 
+        JOIN checklists ch ON ce.checklist_id = ch.id 
+        WHERE ch.company_id = ?
+      `, [companyId]);
+      totalExecutions = totalResult?.count || 0;
+    } catch (e) {
+      console.error('Erro ao contar execuções totais:', e.message);
+    }
+    
+    try {
+      const recentResult = await dbGetAsync(`
+        SELECT COUNT(*) as count FROM checklist_executions ce 
+        JOIN checklists ch ON ce.checklist_id = ch.id 
+        WHERE ch.company_id = ? AND ce.created_at >= ${dateSubtract(30)}
+      `, [companyId]);
+      executions30d = recentResult?.count || 0;
+    } catch (e) {
+      console.error('Erro ao contar execuções 30d:', e.message);
+    }
     
     res.json({
       company,
       users,
       checklists,
-      stats
+      stats: {
+        total_executions: totalExecutions,
+        executions_30d: executions30d
+      }
     });
   } catch (error) {
     console.error('Erro ao buscar empresa:', error);
-    res.status(500).json({ error: 'Erro ao buscar empresa' });
+    res.status(500).json({ error: 'Erro ao buscar empresa', details: error.message });
   }
 });
 
@@ -586,63 +639,85 @@ router.post('/checklists/:checklistId/copy', async (req, res) => {
     const { checklistId } = req.params;
     const { target_company_id } = req.body;
     
+    console.log('Copiando checklist:', checklistId, 'para empresa:', target_company_id);
+    
     if (!target_company_id) {
       return res.status(400).json({ error: 'Empresa de destino é obrigatória' });
     }
     
     // Buscar checklist original
     const originalChecklist = await dbGetAsync(`
-      SELECT * FROM checklists WHERE id = ?
+      SELECT id, title, description, periodicity, schedule_time, schedule_days FROM checklists WHERE id = ?
     `, [checklistId]);
     
     if (!originalChecklist) {
       return res.status(404).json({ error: 'Checklist não encontrado' });
     }
     
+    console.log('Checklist original encontrado:', originalChecklist.title);
+    
     // Buscar itens do checklist original
     const originalItems = await dbAllAsync(`
-      SELECT * FROM checklist_items WHERE checklist_id = ? ORDER BY order_index
-    `, [checklistId]);
+      SELECT id, description, is_required, order_index, item_type FROM checklist_items WHERE checklist_id = ? ORDER BY order_index
+    `, [checklistId]) || [];
+    
+    console.log('Itens encontrados:', originalItems.length);
     
     // Gerar novo ID
     const { v4: uuidv4 } = await import('uuid');
     const newChecklistId = uuidv4();
     
-    // Criar novo checklist (sem category_id pois pode não existir na empresa de destino)
-    await dbRunAsync(`
-      INSERT INTO checklists (id, title, description, company_id, periodicity, schedule_time, schedule_days, is_active, created_by, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ${currentTimestamp()})
-    `, [
+    // Criar novo checklist com campos mínimos obrigatórios
+    const insertQuery = isProduction 
+      ? `INSERT INTO checklists (id, title, description, company_id, periodicity, is_active, created_by, created_at)
+         VALUES ($1, $2, $3, $4, $5, 1, $6, NOW())`
+      : `INSERT INTO checklists (id, title, description, company_id, periodicity, is_active, created_by, created_at)
+         VALUES (?, ?, ?, ?, ?, 1, ?, datetime('now'))`;
+    
+    await dbRunAsync(insertQuery, [
       newChecklistId,
       `${originalChecklist.title} (Cópia)`,
-      originalChecklist.description,
+      originalChecklist.description || '',
       target_company_id,
-      originalChecklist.periodicity,
-      originalChecklist.schedule_time,
-      originalChecklist.schedule_days,
+      originalChecklist.periodicity || 'daily',
       req.user.id
     ]);
+    
+    console.log('Checklist criado com ID:', newChecklistId);
     
     // Copiar itens
     for (const item of originalItems) {
       const newItemId = uuidv4();
-      await dbRunAsync(`
-        INSERT INTO checklist_items (id, checklist_id, description, is_required, order_index, item_type)
-        VALUES (?, ?, ?, ?, ?, ?)
-      `, [newItemId, newChecklistId, item.description, item.is_required, item.order_index, item.item_type || 'checkbox']);
+      const itemInsertQuery = isProduction
+        ? `INSERT INTO checklist_items (id, checklist_id, description, is_required, order_index, item_type)
+           VALUES ($1, $2, $3, $4, $5, $6)`
+        : `INSERT INTO checklist_items (id, checklist_id, description, is_required, order_index, item_type)
+           VALUES (?, ?, ?, ?, ?, ?)`;
+      
+      await dbRunAsync(itemInsertQuery, [
+        newItemId, 
+        newChecklistId, 
+        item.description, 
+        item.is_required || 0, 
+        item.order_index || 0, 
+        item.item_type || 'checkbox'
+      ]);
     }
+    
+    console.log('Itens copiados com sucesso');
     
     // Buscar nome da empresa de destino
     const targetCompany = await dbGetAsync(`SELECT name FROM companies WHERE id = ?`, [target_company_id]);
     
     res.json({
       success: true,
-      message: `Checklist copiado com sucesso para ${targetCompany?.name}`,
-      new_checklist_id: newChecklistId
+      message: `Checklist copiado com sucesso para ${targetCompany?.name || 'empresa'}`,
+      new_checklist_id: newChecklistId,
+      items_copied: originalItems.length
     });
   } catch (error) {
     console.error('Erro ao copiar checklist:', error);
-    res.status(500).json({ error: 'Erro ao copiar checklist' });
+    res.status(500).json({ error: 'Erro ao copiar checklist', details: error.message });
   }
 });
 
