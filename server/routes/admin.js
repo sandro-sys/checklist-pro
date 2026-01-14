@@ -608,15 +608,14 @@ router.post('/checklists/:checklistId/copy', async (req, res) => {
     const { v4: uuidv4 } = await import('uuid');
     const newChecklistId = uuidv4();
     
-    // Criar novo checklist
+    // Criar novo checklist (sem category_id pois pode não existir na empresa de destino)
     await dbRunAsync(`
-      INSERT INTO checklists (id, title, description, category_id, company_id, periodicity, schedule_time, schedule_days, is_active, created_by, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ${currentTimestamp()})
+      INSERT INTO checklists (id, title, description, company_id, periodicity, schedule_time, schedule_days, is_active, created_by, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ${currentTimestamp()})
     `, [
       newChecklistId,
       `${originalChecklist.title} (Cópia)`,
       originalChecklist.description,
-      originalChecklist.category_id,
       target_company_id,
       originalChecklist.periodicity,
       originalChecklist.schedule_time,
