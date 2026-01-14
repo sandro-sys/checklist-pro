@@ -532,7 +532,7 @@ router.post('/logout', authenticateToken, async (req, res) => {
 router.get('/me', authenticateToken, async (req, res) => {
   try {
     const user = await dbGetAsync(`
-      SELECT u.id, u.email, u.name, u.role_type, u.company_id, u.created_at,
+      SELECT u.id, u.email, u.name, u.role_type, u.company_id, u.is_master, u.created_at,
              c.name as company_name
       FROM users u
       LEFT JOIN companies c ON u.company_id = c.id OR c.owner_id = u.id
@@ -543,7 +543,11 @@ router.get('/me', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'Usuário não encontrado' });
     }
 
-    res.json(user);
+    // Converter is_master para boolean
+    res.json({
+      ...user,
+      is_master: user.is_master === 1
+    });
   } catch (error) {
     console.error('Erro ao obter perfil:', error);
     res.status(500).json({ error: 'Erro ao obter perfil' });
