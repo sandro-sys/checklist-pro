@@ -27,6 +27,7 @@ import Privacy from './pages/Privacy'
 import Terms from './pages/Terms'
 import ChangePassword from './pages/ChangePassword'
 import AdminDashboard from './pages/AdminDashboard'
+import Support from './pages/Support'
 
 // Protected Route Component
 function ProtectedRoute({ children }) {
@@ -130,6 +131,7 @@ function App() {
         <Route path="/reports" element={<Reports />} />
         <Route path="/pricing" element={<Pricing />} />
         <Route path="/subscriptions" element={<Subscriptions />} />
+        <Route path="/support" element={<Support />} />
         <Route path="/admin" element={<AdminDashboard />} />
       </Route>
       

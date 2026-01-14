@@ -23,7 +23,12 @@ import {
   XCircle,
   RefreshCw,
   BarChart3,
-  PieChart
+  PieChart,
+  Copy,
+  Send,
+  Headphones,
+  Target,
+  ArrowRight
 } from 'lucide-react'
 import api from '../services/api'
 import { useAuthStore } from '../store/authStore'
@@ -58,6 +63,25 @@ export default function AdminDashboard() {
   
   // Selected company detail
   const [selectedCompany, setSelectedCompany] = useState(null)
+  
+  // Company metrics
+  const [companyMetrics, setCompanyMetrics] = useState(null)
+  const [loadingMetrics, setLoadingMetrics] = useState(false)
+  
+  // Copy checklists state
+  const [allChecklists, setAllChecklists] = useState([])
+  const [checklistSearch, setChecklistSearch] = useState('')
+  const [selectedChecklist, setSelectedChecklist] = useState(null)
+  const [targetCompanyId, setTargetCompanyId] = useState('')
+  const [copying, setCopying] = useState(false)
+  
+  // Support messages state
+  const [supportConversations, setSupportConversations] = useState([])
+  const [selectedConversation, setSelectedConversation] = useState(null)
+  const [conversationMessages, setConversationMessages] = useState([])
+  const [newSupportMessage, setNewSupportMessage] = useState('')
+  const [sendingMessage, setSendingMessage] = useState(false)
+  const [unreadSupport, setUnreadSupport] = useState(0)
 
   useEffect(() => {
     if (!user?.is_master) {
@@ -74,8 +98,13 @@ export default function AdminDashboard() {
       fetchUsers()
     } else if (activeTab === 'messages') {
       fetchMessages()
+    } else if (activeTab === 'copy') {
+      fetchAllChecklists()
+      fetchCompanies()
+    } else if (activeTab === 'support') {
+      fetchSupportConversations()
     }
-  }, [activeTab, companiesPage, companiesSearch, companiesPlanFilter, usersPage, usersSearch, messagesPage, unreadOnly])
+  }, [activeTab, companiesPage, companiesSearch, companiesPlanFilter, usersPage, usersSearch, messagesPage, unreadOnly, checklistSearch])
 
   const fetchDashboard = async () => {
     try {
@@ -142,6 +171,93 @@ export default function AdminDashboard() {
     } catch (error) {
       console.error('Erro ao carregar detalhes:', error)
       toast.error('Erro ao carregar detalhes da empresa')
+    }
+  }
+
+  const fetchCompanyMetrics = async (companyId) => {
+    try {
+      setLoadingMetrics(true)
+      const response = await api.get(`/admin/companies/${companyId}/metrics`)
+      setCompanyMetrics(response.data)
+    } catch (error) {
+      console.error('Erro ao carregar métricas:', error)
+      toast.error('Erro ao carregar métricas')
+    } finally {
+      setLoadingMetrics(false)
+    }
+  }
+
+  const fetchAllChecklists = async () => {
+    try {
+      const response = await api.get('/admin/checklists', {
+        params: { search: checklistSearch }
+      })
+      setAllChecklists(response.data.checklists)
+    } catch (error) {
+      console.error('Erro ao carregar checklists:', error)
+    }
+  }
+
+  const copyChecklist = async () => {
+    if (!selectedChecklist || !targetCompanyId) {
+      toast.error('Selecione um checklist e uma empresa de destino')
+      return
+    }
+    
+    try {
+      setCopying(true)
+      const response = await api.post(`/admin/checklists/${selectedChecklist}/copy`, {
+        target_company_id: targetCompanyId
+      })
+      toast.success(response.data.message)
+      setSelectedChecklist(null)
+      setTargetCompanyId('')
+    } catch (error) {
+      console.error('Erro ao copiar checklist:', error)
+      toast.error('Erro ao copiar checklist')
+    } finally {
+      setCopying(false)
+    }
+  }
+
+  const fetchSupportConversations = async () => {
+    try {
+      const response = await api.get('/admin/support')
+      setSupportConversations(response.data.conversations)
+      setUnreadSupport(response.data.unread_total)
+    } catch (error) {
+      console.error('Erro ao carregar conversas:', error)
+    }
+  }
+
+  const fetchConversationMessages = async (companyId) => {
+    try {
+      const response = await api.get(`/admin/support/${companyId}`)
+      setConversationMessages(response.data.messages)
+      setSelectedConversation(response.data.company)
+      fetchSupportConversations() // Atualizar contadores
+    } catch (error) {
+      console.error('Erro ao carregar mensagens:', error)
+      toast.error('Erro ao carregar mensagens')
+    }
+  }
+
+  const sendSupportMessage = async () => {
+    if (!newSupportMessage.trim() || !selectedConversation) return
+    
+    try {
+      setSendingMessage(true)
+      await api.post(`/admin/support/${selectedConversation.id}`, {
+        message: newSupportMessage
+      })
+      setNewSupportMessage('')
+      fetchConversationMessages(selectedConversation.id)
+      toast.success('Mensagem enviada!')
+    } catch (error) {
+      console.error('Erro ao enviar mensagem:', error)
+      toast.error('Erro ao enviar mensagem')
+    } finally {
+      setSendingMessage(false)
     }
   }
 
@@ -240,7 +356,9 @@ export default function AdminDashboard() {
             { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
             { id: 'companies', label: 'Empresas', icon: Building2 },
             { id: 'users', label: 'Usuários', icon: Users },
-            { id: 'messages', label: 'Mensagens', icon: MessageSquare }
+            { id: 'copy', label: 'Copiar Checklists', icon: Copy },
+            { id: 'support', label: 'Suporte', icon: Headphones },
+            { id: 'messages', label: 'Contato', icon: MessageSquare }
           ].map(tab => (
             <button
               key={tab.id}
@@ -256,6 +374,11 @@ export default function AdminDashboard() {
               {tab.id === 'messages' && dashboard?.unread_messages > 0 && (
                 <span className="px-2 py-0.5 bg-rose-500 text-white text-xs rounded-full">
                   {dashboard.unread_messages}
+                </span>
+              )}
+              {tab.id === 'support' && unreadSupport > 0 && (
+                <span className="px-2 py-0.5 bg-rose-500 text-white text-xs rounded-full">
+                  {unreadSupport}
                 </span>
               )}
             </button>
@@ -700,6 +823,213 @@ export default function AdminDashboard() {
                   </div>
                 ))
               )}
+            </div>
+          </motion.div>
+        )}
+
+        {/* Copy Checklists Tab */}
+        {activeTab === 'copy' && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+          >
+            <div className="grid md:grid-cols-2 gap-6">
+              {/* Selecionar Checklist */}
+              <div className="bg-dark-800/50 border border-dark-700/50 rounded-2xl p-6">
+                <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                  <ClipboardCheck className="w-5 h-5 text-primary-400" />
+                  Selecionar Checklist
+                </h3>
+                
+                <div className="mb-4">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-dark-500" />
+                    <input
+                      type="text"
+                      placeholder="Buscar checklist..."
+                      value={checklistSearch}
+                      onChange={(e) => setChecklistSearch(e.target.value)}
+                      className="w-full pl-10 pr-4 py-2 bg-dark-700 border border-dark-600 rounded-xl text-white placeholder-dark-500 focus:border-primary-500"
+                    />
+                  </div>
+                </div>
+                
+                <div className="space-y-2 max-h-96 overflow-y-auto">
+                  {allChecklists.map(checklist => (
+                    <div
+                      key={checklist.id}
+                      onClick={() => setSelectedChecklist(checklist.id)}
+                      className={`p-3 rounded-xl cursor-pointer transition-all ${
+                        selectedChecklist === checklist.id
+                          ? 'bg-primary-500/20 border border-primary-500'
+                          : 'bg-dark-700/50 border border-transparent hover:bg-dark-700'
+                      }`}
+                    >
+                      <p className="font-medium text-white">{checklist.title}</p>
+                      <p className="text-sm text-dark-400">{checklist.company_name}</p>
+                      <p className="text-xs text-dark-500">{checklist.items_count} itens</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Selecionar Destino */}
+              <div className="bg-dark-800/50 border border-dark-700/50 rounded-2xl p-6">
+                <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                  <Building2 className="w-5 h-5 text-primary-400" />
+                  Empresa de Destino
+                </h3>
+                
+                <div className="space-y-2 max-h-96 overflow-y-auto mb-4">
+                  {companies.map(company => (
+                    <div
+                      key={company.id}
+                      onClick={() => setTargetCompanyId(company.id)}
+                      className={`p-3 rounded-xl cursor-pointer transition-all ${
+                        targetCompanyId === company.id
+                          ? 'bg-primary-500/20 border border-primary-500'
+                          : 'bg-dark-700/50 border border-transparent hover:bg-dark-700'
+                      }`}
+                    >
+                      <p className="font-medium text-white">{company.name}</p>
+                      <p className="text-sm text-dark-400">{company.owner_email}</p>
+                    </div>
+                  ))}
+                </div>
+
+                <button
+                  onClick={copyChecklist}
+                  disabled={!selectedChecklist || !targetCompanyId || copying}
+                  className="w-full flex items-center justify-center gap-2 py-3 bg-primary-500 text-white rounded-xl font-medium hover:bg-primary-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {copying ? (
+                    <RefreshCw className="w-5 h-5 animate-spin" />
+                  ) : (
+                    <Copy className="w-5 h-5" />
+                  )}
+                  {copying ? 'Copiando...' : 'Copiar Checklist'}
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+
+        {/* Support Tab */}
+        {activeTab === 'support' && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+          >
+            <div className="grid md:grid-cols-3 gap-6">
+              {/* Lista de Conversas */}
+              <div className="bg-dark-800/50 border border-dark-700/50 rounded-2xl p-4">
+                <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                  <Headphones className="w-5 h-5 text-primary-400" />
+                  Conversas
+                </h3>
+                
+                <div className="space-y-2 max-h-[500px] overflow-y-auto">
+                  {supportConversations.length === 0 ? (
+                    <p className="text-dark-400 text-center py-8">Nenhuma conversa</p>
+                  ) : (
+                    supportConversations.map(conv => (
+                      <div
+                        key={conv.company_id}
+                        onClick={() => fetchConversationMessages(conv.company_id)}
+                        className={`p-3 rounded-xl cursor-pointer transition-all ${
+                          selectedConversation?.id === conv.company_id
+                            ? 'bg-primary-500/20 border border-primary-500'
+                            : 'bg-dark-700/50 border border-transparent hover:bg-dark-700'
+                        }`}
+                      >
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <p className="font-medium text-white">{conv.company_name}</p>
+                            <p className="text-sm text-dark-400">{conv.user_name}</p>
+                          </div>
+                          {conv.unread_count > 0 && (
+                            <span className="px-2 py-0.5 bg-rose-500 text-white text-xs rounded-full">
+                              {conv.unread_count}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-dark-500 mt-1 truncate">{conv.message}</p>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              {/* Área de Mensagens */}
+              <div className="md:col-span-2 bg-dark-800/50 border border-dark-700/50 rounded-2xl p-4 flex flex-col">
+                {selectedConversation ? (
+                  <>
+                    <div className="flex items-center gap-3 pb-4 border-b border-dark-700">
+                      <div className="w-10 h-10 bg-primary-500/20 rounded-full flex items-center justify-center">
+                        <Building2 className="w-5 h-5 text-primary-400" />
+                      </div>
+                      <div>
+                        <p className="font-medium text-white">{selectedConversation.name}</p>
+                        <p className="text-sm text-dark-400">{selectedConversation.email}</p>
+                      </div>
+                    </div>
+                    
+                    {/* Mensagens */}
+                    <div className="flex-1 overflow-y-auto py-4 space-y-3 max-h-[400px]">
+                      {conversationMessages.map(msg => (
+                        <div
+                          key={msg.id}
+                          className={`flex ${msg.is_from_master ? 'justify-end' : 'justify-start'}`}
+                        >
+                          <div className={`max-w-[80%] p-3 rounded-xl ${
+                            msg.is_from_master
+                              ? 'bg-primary-500/20 text-white'
+                              : 'bg-dark-700 text-white'
+                          }`}>
+                            <p className="text-xs text-dark-400 mb-1">
+                              {msg.is_from_master ? 'Você' : msg.user_name} • {formatDate(msg.created_at)}
+                            </p>
+                            {msg.subject && <p className="font-medium text-sm mb-1">{msg.subject}</p>}
+                            <p className="text-sm whitespace-pre-wrap">{msg.message}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    
+                    {/* Input de mensagem */}
+                    <div className="pt-4 border-t border-dark-700">
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          placeholder="Digite sua resposta..."
+                          value={newSupportMessage}
+                          onChange={(e) => setNewSupportMessage(e.target.value)}
+                          onKeyPress={(e) => e.key === 'Enter' && sendSupportMessage()}
+                          className="flex-1 px-4 py-2 bg-dark-700 border border-dark-600 rounded-xl text-white placeholder-dark-500 focus:border-primary-500"
+                        />
+                        <button
+                          onClick={sendSupportMessage}
+                          disabled={!newSupportMessage.trim() || sendingMessage}
+                          className="px-4 py-2 bg-primary-500 text-white rounded-xl hover:bg-primary-600 transition-colors disabled:opacity-50"
+                        >
+                          {sendingMessage ? (
+                            <RefreshCw className="w-5 h-5 animate-spin" />
+                          ) : (
+                            <Send className="w-5 h-5" />
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <div className="flex-1 flex items-center justify-center">
+                    <div className="text-center">
+                      <Headphones className="w-12 h-12 text-dark-600 mx-auto mb-4" />
+                      <p className="text-dark-400">Selecione uma conversa para ver as mensagens</p>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </motion.div>
         )}

@@ -16,7 +16,8 @@ import {
   User,
   Zap,
   FileText,
-  Crown
+  Crown,
+  Headphones
 } from 'lucide-react'
 import { useAuthStore } from '../store/authStore'
 
@@ -28,6 +29,7 @@ const getMenuItems = (isMaster) => {
     { path: '/company', icon: Building2, label: 'Empresa' },
     { path: '/quick-actions', icon: Zap, label: 'Acoes Rapidas' },
     { path: '/reports', icon: FileText, label: 'Relatorios' },
+    { path: '/support', icon: Headphones, label: 'Suporte' },
     { path: '/pricing', icon: CreditCard, label: 'Planos' },
     { path: '/subscriptions', icon: CreditCard, label: 'Assinaturas' },
   ]

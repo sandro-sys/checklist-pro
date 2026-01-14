@@ -291,6 +291,21 @@ async function initPostgres() {
     )
   `);
 
+  // Tabela de mensagens de suporte (comunicação empresa <-> master)
+  await pgPool.query(`
+    CREATE TABLE IF NOT EXISTS support_messages (
+      id TEXT PRIMARY KEY,
+      company_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      subject TEXT NOT NULL,
+      message TEXT NOT NULL,
+      is_from_master INTEGER DEFAULT 0,
+      parent_id TEXT,
+      read_at TIMESTAMP,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
   console.log('✅ Tabelas PostgreSQL criadas com sucesso!');
 }
 
@@ -538,6 +553,21 @@ async function initSQLite() {
       phone TEXT NOT NULL,
       subject TEXT NOT NULL,
       message TEXT NOT NULL,
+      read_at TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  // Tabela de mensagens de suporte (comunicação empresa <-> master)
+  db.run(`
+    CREATE TABLE IF NOT EXISTS support_messages (
+      id TEXT PRIMARY KEY,
+      company_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      subject TEXT NOT NULL,
+      message TEXT NOT NULL,
+      is_from_master INTEGER DEFAULT 0,
+      parent_id TEXT,
       read_at TEXT,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP
     )

@@ -418,5 +418,332 @@ router.get('/stats/signups', async (req, res) => {
   }
 });
 
+// ==========================================
+// MÉTRICAS DETALHADAS POR EMPRESA
+// ==========================================
+
+// Métricas detalhadas de uma empresa específica
+router.get('/companies/:companyId/metrics', async (req, res) => {
+  try {
+    const { companyId } = req.params;
+    const { days = 30 } = req.query;
+    
+    // Execuções por dia
+    const executionsByDay = await dbAllAsync(`
+      SELECT 
+        DATE(ce.created_at) as date,
+        COUNT(*) as count
+      FROM checklist_executions ce
+      JOIN checklists ch ON ce.checklist_id = ch.id
+      WHERE ch.company_id = ? AND ce.created_at >= datetime('now', '-${parseInt(days)} days')
+      GROUP BY DATE(ce.created_at)
+      ORDER BY date ASC
+    `, [companyId]);
+    
+    // Taxa de conformidade média
+    const conformityStats = await dbGetAsync(`
+      SELECT 
+        AVG(CASE WHEN er.is_checked = 1 THEN 100.0 ELSE 0 END) as avg_conformity
+      FROM execution_responses er
+      JOIN checklist_executions ce ON er.execution_id = ce.id
+      JOIN checklists ch ON ce.checklist_id = ch.id
+      WHERE ch.company_id = ? AND ce.created_at >= datetime('now', '-${parseInt(days)} days')
+    `, [companyId]);
+    
+    // Checklists mais executados
+    const topChecklists = await dbAllAsync(`
+      SELECT 
+        ch.id,
+        ch.title,
+        COUNT(ce.id) as executions_count
+      FROM checklists ch
+      LEFT JOIN checklist_executions ce ON ch.id = ce.checklist_id
+      WHERE ch.company_id = ?
+      GROUP BY ch.id
+      ORDER BY executions_count DESC
+      LIMIT 5
+    `, [companyId]);
+    
+    // Usuários mais ativos
+    const topUsers = await dbAllAsync(`
+      SELECT 
+        u.id,
+        u.name,
+        u.email,
+        COUNT(ce.id) as executions_count
+      FROM users u
+      LEFT JOIN checklist_executions ce ON u.id = ce.executed_by
+      JOIN checklists ch ON ce.checklist_id = ch.id
+      WHERE ch.company_id = ?
+      GROUP BY u.id
+      ORDER BY executions_count DESC
+      LIMIT 5
+    `, [companyId]);
+    
+    // Execuções por hora do dia
+    const executionsByHour = await dbAllAsync(`
+      SELECT 
+        CAST(strftime('%H', ce.created_at) AS INTEGER) as hour,
+        COUNT(*) as count
+      FROM checklist_executions ce
+      JOIN checklists ch ON ce.checklist_id = ch.id
+      WHERE ch.company_id = ? AND ce.created_at >= datetime('now', '-${parseInt(days)} days')
+      GROUP BY hour
+      ORDER BY hour ASC
+    `, [companyId]);
+    
+    // Itens com mais não conformidades
+    const nonConformItems = await dbAllAsync(`
+      SELECT 
+        ci.description,
+        ch.title as checklist_title,
+        COUNT(*) as non_conform_count
+      FROM execution_responses er
+      JOIN checklist_items ci ON er.item_id = ci.id
+      JOIN checklist_executions ce ON er.execution_id = ce.id
+      JOIN checklists ch ON ce.checklist_id = ch.id
+      WHERE ch.company_id = ? AND er.is_checked = 0 AND er.is_not_applicable = 0
+      GROUP BY ci.id
+      ORDER BY non_conform_count DESC
+      LIMIT 10
+    `, [companyId]);
+    
+    res.json({
+      executions_by_day: executionsByDay,
+      avg_conformity: conformityStats?.avg_conformity || 0,
+      top_checklists: topChecklists,
+      top_users: topUsers,
+      executions_by_hour: executionsByHour,
+      non_conform_items: nonConformItems
+    });
+  } catch (error) {
+    console.error('Erro ao buscar métricas da empresa:', error);
+    res.status(500).json({ error: 'Erro ao buscar métricas' });
+  }
+});
+
+// ==========================================
+// COPIAR CHECKLISTS ENTRE EMPRESAS
+// ==========================================
+
+// Listar checklists disponíveis para copiar
+router.get('/checklists', async (req, res) => {
+  try {
+    const { search = '' } = req.query;
+    
+    let whereClause = '1=1';
+    const params = [];
+    
+    if (search) {
+      whereClause += ` AND (ch.title LIKE ? OR c.name LIKE ?)`;
+      params.push(`%${search}%`, `%${search}%`);
+    }
+    
+    const checklists = await dbAllAsync(`
+      SELECT 
+        ch.id,
+        ch.title,
+        ch.description,
+        ch.periodicity,
+        c.id as company_id,
+        c.name as company_name,
+        (SELECT COUNT(*) FROM checklist_items WHERE checklist_id = ch.id) as items_count
+      FROM checklists ch
+      JOIN companies c ON ch.company_id = c.id
+      WHERE ${whereClause}
+      ORDER BY ch.created_at DESC
+      LIMIT 100
+    `, params);
+    
+    res.json({ checklists });
+  } catch (error) {
+    console.error('Erro ao listar checklists:', error);
+    res.status(500).json({ error: 'Erro ao listar checklists' });
+  }
+});
+
+// Copiar checklist para outra empresa
+router.post('/checklists/:checklistId/copy', async (req, res) => {
+  try {
+    const { checklistId } = req.params;
+    const { target_company_id } = req.body;
+    
+    if (!target_company_id) {
+      return res.status(400).json({ error: 'Empresa de destino é obrigatória' });
+    }
+    
+    // Buscar checklist original
+    const originalChecklist = await dbGetAsync(`
+      SELECT * FROM checklists WHERE id = ?
+    `, [checklistId]);
+    
+    if (!originalChecklist) {
+      return res.status(404).json({ error: 'Checklist não encontrado' });
+    }
+    
+    // Buscar itens do checklist original
+    const originalItems = await dbAllAsync(`
+      SELECT * FROM checklist_items WHERE checklist_id = ? ORDER BY order_index
+    `, [checklistId]);
+    
+    // Gerar novo ID
+    const { v4: uuidv4 } = await import('uuid');
+    const newChecklistId = uuidv4();
+    
+    // Criar novo checklist
+    await dbRunAsync(`
+      INSERT INTO checklists (id, title, description, category_id, company_id, periodicity, schedule_time, schedule_days, is_active, created_by, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, datetime('now'))
+    `, [
+      newChecklistId,
+      `${originalChecklist.title} (Cópia)`,
+      originalChecklist.description,
+      originalChecklist.category_id,
+      target_company_id,
+      originalChecklist.periodicity,
+      originalChecklist.schedule_time,
+      originalChecklist.schedule_days,
+      req.user.id
+    ]);
+    
+    // Copiar itens
+    for (const item of originalItems) {
+      const newItemId = uuidv4();
+      await dbRunAsync(`
+        INSERT INTO checklist_items (id, checklist_id, description, is_required, order_index, item_type)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `, [newItemId, newChecklistId, item.description, item.is_required, item.order_index, item.item_type || 'checkbox']);
+    }
+    
+    // Buscar nome da empresa de destino
+    const targetCompany = await dbGetAsync(`SELECT name FROM companies WHERE id = ?`, [target_company_id]);
+    
+    res.json({
+      success: true,
+      message: `Checklist copiado com sucesso para ${targetCompany?.name}`,
+      new_checklist_id: newChecklistId
+    });
+  } catch (error) {
+    console.error('Erro ao copiar checklist:', error);
+    res.status(500).json({ error: 'Erro ao copiar checklist' });
+  }
+});
+
+// ==========================================
+// SISTEMA DE MENSAGENS DE SUPORTE
+// ==========================================
+
+// Listar todas as conversas de suporte (para master)
+router.get('/support', async (req, res) => {
+  try {
+    const { page = 1, limit = 20, unread_only = false } = req.query;
+    const offset = (page - 1) * limit;
+    
+    // Buscar conversas agrupadas por empresa
+    const conversations = await dbAllAsync(`
+      SELECT 
+        c.id as company_id,
+        c.name as company_name,
+        u.name as user_name,
+        u.email as user_email,
+        sm.subject,
+        sm.message,
+        sm.created_at as last_message_at,
+        sm.is_from_master,
+        (SELECT COUNT(*) FROM support_messages WHERE company_id = c.id AND read_at IS NULL AND is_from_master = 0) as unread_count
+      FROM support_messages sm
+      JOIN companies c ON sm.company_id = c.id
+      JOIN users u ON sm.user_id = u.id
+      WHERE sm.id IN (
+        SELECT MAX(id) FROM support_messages GROUP BY company_id
+      )
+      ${unread_only === 'true' ? 'HAVING unread_count > 0' : ''}
+      ORDER BY sm.created_at DESC
+      LIMIT ? OFFSET ?
+    `, [parseInt(limit), parseInt(offset)]);
+    
+    // Contar total de conversas não lidas
+    const unreadTotal = await dbGetAsync(`
+      SELECT COUNT(DISTINCT company_id) as count
+      FROM support_messages
+      WHERE read_at IS NULL AND is_from_master = 0
+    `);
+    
+    res.json({
+      conversations,
+      unread_total: unreadTotal?.count || 0,
+      page: parseInt(page),
+      limit: parseInt(limit)
+    });
+  } catch (error) {
+    console.error('Erro ao listar conversas de suporte:', error);
+    res.status(500).json({ error: 'Erro ao listar conversas' });
+  }
+});
+
+// Buscar mensagens de uma empresa específica
+router.get('/support/:companyId', async (req, res) => {
+  try {
+    const { companyId } = req.params;
+    
+    const messages = await dbAllAsync(`
+      SELECT 
+        sm.*,
+        u.name as user_name,
+        u.email as user_email
+      FROM support_messages sm
+      JOIN users u ON sm.user_id = u.id
+      WHERE sm.company_id = ?
+      ORDER BY sm.created_at ASC
+    `, [companyId]);
+    
+    // Marcar mensagens da empresa como lidas
+    await dbRunAsync(`
+      UPDATE support_messages 
+      SET read_at = datetime('now')
+      WHERE company_id = ? AND is_from_master = 0 AND read_at IS NULL
+    `, [companyId]);
+    
+    // Buscar info da empresa
+    const company = await dbGetAsync(`
+      SELECT id, name, email FROM companies WHERE id = ?
+    `, [companyId]);
+    
+    res.json({ messages, company });
+  } catch (error) {
+    console.error('Erro ao buscar mensagens:', error);
+    res.status(500).json({ error: 'Erro ao buscar mensagens' });
+  }
+});
+
+// Enviar mensagem de suporte (master para empresa)
+router.post('/support/:companyId', async (req, res) => {
+  try {
+    const { companyId } = req.params;
+    const { subject, message } = req.body;
+    
+    if (!message) {
+      return res.status(400).json({ error: 'Mensagem é obrigatória' });
+    }
+    
+    const { v4: uuidv4 } = await import('uuid');
+    const messageId = uuidv4();
+    
+    await dbRunAsync(`
+      INSERT INTO support_messages (id, company_id, user_id, subject, message, is_from_master, created_at)
+      VALUES (?, ?, ?, ?, ?, 1, datetime('now'))
+    `, [messageId, companyId, req.user.id, subject || 'Resposta do Suporte', message]);
+    
+    res.json({
+      success: true,
+      message: 'Mensagem enviada com sucesso',
+      message_id: messageId
+    });
+  } catch (error) {
+    console.error('Erro ao enviar mensagem:', error);
+    res.status(500).json({ error: 'Erro ao enviar mensagem' });
+  }
+});
+
 export default router;
 

@@ -17,6 +17,7 @@ import rolesRoutes from './routes/roles.js';
 import paymentsRoutes from './routes/payments.js';
 import uploadsRoutes from './routes/uploads.js';
 import adminRoutes from './routes/admin.js';
+import supportRoutes from './routes/support.js';
 
 // Database
 import { initDatabase, dbRunAsync, dbGetAsync } from './database/init.js';
@@ -118,6 +119,7 @@ app.use('/api/roles', rolesRoutes);
 app.use('/api/payments', paymentsRoutes);
 app.use('/api/uploads', uploadsRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/support', supportRoutes);
 
 // Health check (tambem usado pelo cron para manter servidor acordado)
 app.get('/api/health', (req, res) => {
