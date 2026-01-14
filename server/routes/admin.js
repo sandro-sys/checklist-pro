@@ -1,8 +1,23 @@
 import express from 'express';
-import { dbAllAsync, dbGetAsync, dbRunAsync } from '../database/init.js';
+import { dbAllAsync, dbGetAsync, dbRunAsync, isProduction } from '../database/init.js';
 import { authenticateToken, requireMaster } from '../middleware/auth.js';
 
 const router = express.Router();
+
+// Helper para queries de data compatíveis com SQLite e PostgreSQL
+const dateSubtract = (days) => {
+  if (isProduction) {
+    return `NOW() - INTERVAL '${days} days'`;
+  }
+  return `datetime('now', '-${days} days')`;
+};
+
+const currentTimestamp = () => {
+  if (isProduction) {
+    return 'NOW()';
+  }
+  return "datetime('now')";
+};
 
 // Todas as rotas requerem autenticação e ser master
 router.use(authenticateToken);
@@ -34,21 +49,21 @@ router.get('/dashboard', async (req, res) => {
     const activeUsers = await dbGetAsync(`
       SELECT COUNT(*) as count 
       FROM users 
-      WHERE last_login >= datetime('now', '-7 days')
+      WHERE last_login >= ${dateSubtract(7)}
     `);
     
     // Execuções nos últimos 7 dias
     const recentExecutions = await dbGetAsync(`
       SELECT COUNT(*) as count 
       FROM checklist_executions 
-      WHERE created_at >= datetime('now', '-7 days')
+      WHERE created_at >= ${dateSubtract(7)}
     `);
     
     // Novas empresas nos últimos 30 dias
     const newCompanies = await dbGetAsync(`
       SELECT COUNT(*) as count 
       FROM companies 
-      WHERE created_at >= datetime('now', '-30 days')
+      WHERE created_at >= ${dateSubtract(30)}
     `);
     
     // Mensagens de contato não lidas
@@ -170,7 +185,7 @@ router.get('/companies/:companyId', async (req, res) => {
          WHERE ch.company_id = ?) as total_executions,
         (SELECT COUNT(*) FROM checklist_executions ce 
          JOIN checklists ch ON ce.checklist_id = ch.id 
-         WHERE ch.company_id = ? AND ce.created_at >= datetime('now', '-30 days')) as executions_30d
+         WHERE ch.company_id = ? AND ce.created_at >= ${dateSubtract(30)}) as executions_30d
     `, [companyId, companyId]);
     
     res.json({
@@ -193,7 +208,7 @@ router.put('/companies/:companyId/plan', async (req, res) => {
     
     await dbRunAsync(`
       UPDATE companies 
-      SET plan = ?, plan_expires_at = ?, updated_at = datetime('now')
+      SET plan = ?, plan_expires_at = ?, updated_at = ${currentTimestamp()}
       WHERE id = ?
     `, [plan, plan_expires_at, companyId]);
     
@@ -254,7 +269,7 @@ router.put('/users/:userId/status', async (req, res) => {
     const { is_active } = req.body;
     
     await dbRunAsync(`
-      UPDATE users SET is_active = ?, updated_at = datetime('now')
+      UPDATE users SET is_active = ?, updated_at = ${currentTimestamp()}
       WHERE id = ?
     `, [is_active ? 1 : 0, userId]);
     
@@ -272,7 +287,7 @@ router.put('/users/:userId/master', async (req, res) => {
     const { is_master } = req.body;
     
     await dbRunAsync(`
-      UPDATE users SET is_master = ?, updated_at = datetime('now')
+      UPDATE users SET is_master = ?, updated_at = ${currentTimestamp()}
       WHERE id = ?
     `, [is_master ? 1 : 0, userId]);
     
@@ -323,7 +338,7 @@ router.put('/messages/:messageId/read', async (req, res) => {
     const { messageId } = req.params;
     
     await dbRunAsync(`
-      UPDATE contact_messages SET read_at = datetime('now')
+      UPDATE contact_messages SET read_at = ${currentTimestamp()}
       WHERE id = ?
     `, [messageId]);
     
@@ -368,14 +383,15 @@ router.post('/impersonate/:companyId', async (req, res) => {
 router.get('/stats/executions', async (req, res) => {
   try {
     const { days = 30 } = req.query;
+    const dateFunc = isProduction ? 'DATE(created_at)' : 'DATE(created_at)';
     
     const executions = await dbAllAsync(`
       SELECT 
-        DATE(created_at) as date,
+        ${dateFunc} as date,
         COUNT(*) as count
       FROM checklist_executions
-      WHERE created_at >= datetime('now', '-${parseInt(days)} days')
-      GROUP BY DATE(created_at)
+      WHERE created_at >= ${dateSubtract(parseInt(days))}
+      GROUP BY ${dateFunc}
       ORDER BY date ASC
     `);
     
@@ -390,24 +406,25 @@ router.get('/stats/executions', async (req, res) => {
 router.get('/stats/signups', async (req, res) => {
   try {
     const { days = 30 } = req.query;
+    const dateFunc = isProduction ? 'DATE(created_at)' : 'DATE(created_at)';
     
     const users = await dbAllAsync(`
       SELECT 
-        DATE(created_at) as date,
+        ${dateFunc} as date,
         COUNT(*) as count
       FROM users
-      WHERE created_at >= datetime('now', '-${parseInt(days)} days')
-      GROUP BY DATE(created_at)
+      WHERE created_at >= ${dateSubtract(parseInt(days))}
+      GROUP BY ${dateFunc}
       ORDER BY date ASC
     `);
     
     const companies = await dbAllAsync(`
       SELECT 
-        DATE(created_at) as date,
+        ${dateFunc} as date,
         COUNT(*) as count
       FROM companies
-      WHERE created_at >= datetime('now', '-${parseInt(days)} days')
-      GROUP BY DATE(created_at)
+      WHERE created_at >= ${dateSubtract(parseInt(days))}
+      GROUP BY ${dateFunc}
       ORDER BY date ASC
     `);
     
@@ -435,7 +452,7 @@ router.get('/companies/:companyId/metrics', async (req, res) => {
         COUNT(*) as count
       FROM checklist_executions ce
       JOIN checklists ch ON ce.checklist_id = ch.id
-      WHERE ch.company_id = ? AND ce.created_at >= datetime('now', '-${parseInt(days)} days')
+      WHERE ch.company_id = ? AND ce.created_at >= ${dateSubtract(parseInt(days))}
       GROUP BY DATE(ce.created_at)
       ORDER BY date ASC
     `, [companyId]);
@@ -447,7 +464,7 @@ router.get('/companies/:companyId/metrics', async (req, res) => {
       FROM execution_responses er
       JOIN checklist_executions ce ON er.execution_id = ce.id
       JOIN checklists ch ON ce.checklist_id = ch.id
-      WHERE ch.company_id = ? AND ce.created_at >= datetime('now', '-${parseInt(days)} days')
+      WHERE ch.company_id = ? AND ce.created_at >= ${dateSubtract(parseInt(days))}
     `, [companyId]);
     
     // Checklists mais executados
@@ -459,7 +476,7 @@ router.get('/companies/:companyId/metrics', async (req, res) => {
       FROM checklists ch
       LEFT JOIN checklist_executions ce ON ch.id = ce.checklist_id
       WHERE ch.company_id = ?
-      GROUP BY ch.id
+      GROUP BY ch.id, ch.title
       ORDER BY executions_count DESC
       LIMIT 5
     `, [companyId]);
@@ -475,20 +492,21 @@ router.get('/companies/:companyId/metrics', async (req, res) => {
       LEFT JOIN checklist_executions ce ON u.id = ce.executed_by
       JOIN checklists ch ON ce.checklist_id = ch.id
       WHERE ch.company_id = ?
-      GROUP BY u.id
+      GROUP BY u.id, u.name, u.email
       ORDER BY executions_count DESC
       LIMIT 5
     `, [companyId]);
     
     // Execuções por hora do dia
+    const hourExtract = isProduction ? 'EXTRACT(HOUR FROM ce.created_at)::INTEGER' : "CAST(strftime('%H', ce.created_at) AS INTEGER)";
     const executionsByHour = await dbAllAsync(`
       SELECT 
-        CAST(strftime('%H', ce.created_at) AS INTEGER) as hour,
+        ${hourExtract} as hour,
         COUNT(*) as count
       FROM checklist_executions ce
       JOIN checklists ch ON ce.checklist_id = ch.id
-      WHERE ch.company_id = ? AND ce.created_at >= datetime('now', '-${parseInt(days)} days')
-      GROUP BY hour
+      WHERE ch.company_id = ? AND ce.created_at >= ${dateSubtract(parseInt(days))}
+      GROUP BY ${hourExtract}
       ORDER BY hour ASC
     `, [companyId]);
     
@@ -593,7 +611,7 @@ router.post('/checklists/:checklistId/copy', async (req, res) => {
     // Criar novo checklist
     await dbRunAsync(`
       INSERT INTO checklists (id, title, description, category_id, company_id, periodicity, schedule_time, schedule_days, is_active, created_by, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, datetime('now'))
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ${currentTimestamp()})
     `, [
       newChecklistId,
       `${originalChecklist.title} (Cópia)`,
@@ -700,7 +718,7 @@ router.get('/support/:companyId', async (req, res) => {
     // Marcar mensagens da empresa como lidas
     await dbRunAsync(`
       UPDATE support_messages 
-      SET read_at = datetime('now')
+      SET read_at = ${currentTimestamp()}
       WHERE company_id = ? AND is_from_master = 0 AND read_at IS NULL
     `, [companyId]);
     
@@ -731,7 +749,7 @@ router.post('/support/:companyId', async (req, res) => {
     
     await dbRunAsync(`
       INSERT INTO support_messages (id, company_id, user_id, subject, message, is_from_master, created_at)
-      VALUES (?, ?, ?, ?, ?, 1, datetime('now'))
+      VALUES (?, ?, ?, ?, ?, 1, ${currentTimestamp()})
     `, [messageId, companyId, req.user.id, subject || 'Resposta do Suporte', message]);
     
     res.json({

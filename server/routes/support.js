@@ -1,9 +1,12 @@
 import express from 'express';
 import { v4 as uuidv4 } from 'uuid';
-import { dbAllAsync, dbGetAsync, dbRunAsync } from '../database/init.js';
+import { dbAllAsync, dbGetAsync, dbRunAsync, isProduction } from '../database/init.js';
 import { authenticateToken } from '../middleware/auth.js';
 
 const router = express.Router();
+
+// Helper para timestamp compatível
+const currentTimestamp = () => isProduction ? 'NOW()' : "datetime('now')";
 
 // Todas as rotas requerem autenticação
 router.use(authenticateToken);
@@ -31,7 +34,7 @@ router.get('/', async (req, res) => {
     // Marcar mensagens do master como lidas
     await dbRunAsync(`
       UPDATE support_messages 
-      SET read_at = datetime('now')
+      SET read_at = ${currentTimestamp()}
       WHERE company_id = ? AND is_from_master = 1 AND read_at IS NULL
     `, [companyId]);
     
@@ -70,7 +73,7 @@ router.post('/', async (req, res) => {
     
     await dbRunAsync(`
       INSERT INTO support_messages (id, company_id, user_id, subject, message, is_from_master, created_at)
-      VALUES (?, ?, ?, ?, ?, 0, datetime('now'))
+      VALUES (?, ?, ?, ?, ?, 0, ${currentTimestamp()})
     `, [messageId, companyId, req.user.id, subject, message]);
     
     res.json({
