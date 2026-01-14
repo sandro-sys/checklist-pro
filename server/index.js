@@ -73,6 +73,40 @@ app.use(express.urlencoded({ extended: true }));
 // Servir arquivos de upload
 app.use('/uploads', express.static(join(__dirname, '../uploads')));
 
+// Endpoint para criar primeiro usuario master (executar uma vez) - ANTES das rotas protegidas
+app.post('/api/admin/create-master', async (req, res) => {
+  try {
+    const { email, secret } = req.body;
+    
+    // Verificar secret para proteger o endpoint
+    if (secret !== process.env.ADMIN_SECRET && secret !== 'create-master-2024') {
+      return res.status(403).json({ error: 'Acesso negado' });
+    }
+    
+    if (!email) {
+      return res.status(400).json({ error: 'Email é obrigatório' });
+    }
+    
+    // Verificar se usuario existe
+    const user = await dbGetAsync(`SELECT id, email, name FROM users WHERE email = ?`, [email.toLowerCase()]);
+    
+    if (!user) {
+      return res.status(404).json({ error: 'Usuário não encontrado' });
+    }
+    
+    // Tornar master
+    await dbRunAsync(`UPDATE users SET is_master = 1 WHERE id = ?`, [user.id]);
+    
+    res.json({ 
+      success: true, 
+      message: `Usuário ${user.name} (${user.email}) agora é master!` 
+    });
+  } catch (error) {
+    console.error('Erro ao criar master:', error);
+    res.status(500).json({ error: 'Erro ao criar master' });
+  }
+});
+
 // API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/companies', companyRoutes);
@@ -145,40 +179,6 @@ app.post('/api/admin/force-password-migration', async (req, res) => {
   } catch (error) {
     console.error('Erro na migracao:', error);
     res.status(500).json({ error: 'Erro ao processar migracao' });
-  }
-});
-
-// Endpoint para criar primeiro usuario master (executar uma vez)
-app.post('/api/admin/create-master', async (req, res) => {
-  try {
-    const { email, secret } = req.body;
-    
-    // Verificar secret para proteger o endpoint
-    if (secret !== process.env.ADMIN_SECRET && secret !== 'create-master-2024') {
-      return res.status(403).json({ error: 'Acesso negado' });
-    }
-    
-    if (!email) {
-      return res.status(400).json({ error: 'Email é obrigatório' });
-    }
-    
-    // Verificar se usuario existe
-    const user = await dbGetAsync(`SELECT id, email, name FROM users WHERE email = ?`, [email.toLowerCase()]);
-    
-    if (!user) {
-      return res.status(404).json({ error: 'Usuário não encontrado' });
-    }
-    
-    // Tornar master
-    await dbRunAsync(`UPDATE users SET is_master = 1 WHERE id = ?`, [user.id]);
-    
-    res.json({ 
-      success: true, 
-      message: `Usuário ${user.name} (${user.email}) agora é master!` 
-    });
-  } catch (error) {
-    console.error('Erro ao criar master:', error);
-    res.status(500).json({ error: 'Erro ao criar master' });
   }
 });
 
