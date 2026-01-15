@@ -668,18 +668,17 @@ router.post('/checklists/:checklistId/copy', async (req, res) => {
     const newChecklistId = uuidv4();
     
     // Criar novo checklist com campos mínimos obrigatórios
-    const insertQuery = isProduction 
-      ? `INSERT INTO checklists (id, title, description, company_id, periodicity, is_active, created_by, created_at)
-         VALUES ($1, $2, $3, $4, $5, 1, $6, NOW())`
-      : `INSERT INTO checklists (id, title, description, company_id, periodicity, is_active, created_by, created_at)
-         VALUES (?, ?, ?, ?, ?, 1, ?, datetime('now'))`;
-    
-    await dbRunAsync(insertQuery, [
+    // Usar ? para que dbRunAsync converta automaticamente para $1, $2, etc no PostgreSQL
+    await dbRunAsync(`
+      INSERT INTO checklists (id, title, description, company_id, periodicity, is_active, created_by, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ${currentTimestamp()})
+    `, [
       newChecklistId,
       `${originalChecklist.title} (Cópia)`,
       originalChecklist.description || '',
       target_company_id,
       originalChecklist.periodicity || 'daily',
+      1,
       req.user.id
     ]);
     
@@ -688,13 +687,10 @@ router.post('/checklists/:checklistId/copy', async (req, res) => {
     // Copiar itens
     for (const item of originalItems) {
       const newItemId = uuidv4();
-      const itemInsertQuery = isProduction
-        ? `INSERT INTO checklist_items (id, checklist_id, description, is_required, order_index, item_type)
-           VALUES ($1, $2, $3, $4, $5, $6)`
-        : `INSERT INTO checklist_items (id, checklist_id, description, is_required, order_index, item_type)
-           VALUES (?, ?, ?, ?, ?, ?)`;
-      
-      await dbRunAsync(itemInsertQuery, [
+      await dbRunAsync(`
+        INSERT INTO checklist_items (id, checklist_id, description, is_required, order_index, item_type)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `, [
         newItemId, 
         newChecklistId, 
         item.description, 
