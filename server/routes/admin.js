@@ -600,10 +600,16 @@ router.get('/companies/:companyId/metrics', async (req, res) => {
 // Listar checklists disponíveis para copiar
 router.get('/checklists', async (req, res) => {
   try {
-    const { search = '' } = req.query;
+    const { search = '', company_id = '' } = req.query;
     
     let whereClause = '1=1';
     const params = [];
+    
+    // Filtrar por empresa específica
+    if (company_id) {
+      whereClause += ` AND ch.company_id = ?`;
+      params.push(company_id);
+    }
     
     if (search) {
       whereClause += ` AND (ch.title LIKE ? OR c.name LIKE ?)`;
@@ -684,32 +690,46 @@ router.post('/checklists/:checklistId/copy', async (req, res) => {
     
     console.log('Checklist criado com ID:', newChecklistId);
     
-    // Copiar itens
+    // Copiar itens com tratamento de erro individual
+    let itemsCopied = 0;
     for (const item of originalItems) {
-      const newItemId = uuidv4();
-      await dbRunAsync(`
-        INSERT INTO checklist_items (id, checklist_id, description, is_required, order_index, item_type)
-        VALUES (?, ?, ?, ?, ?, ?)
-      `, [
-        newItemId, 
-        newChecklistId, 
-        item.description, 
-        item.is_required || 0, 
-        item.order_index || 0, 
-        item.item_type || 'checkbox'
-      ]);
+      try {
+        const newItemId = uuidv4();
+        await dbRunAsync(`
+          INSERT INTO checklist_items (id, checklist_id, description, is_required, order_index, item_type)
+          VALUES (?, ?, ?, ?, ?, ?)
+        `, [
+          newItemId, 
+          newChecklistId, 
+          item.description || 'Item sem descrição', 
+          item.is_required ? 1 : 0, 
+          item.order_index || 0, 
+          item.item_type || 'checkbox'
+        ]);
+        itemsCopied++;
+      } catch (itemError) {
+        console.error('Erro ao copiar item:', item.id, itemError.message);
+      }
     }
     
-    console.log('Itens copiados com sucesso');
+    console.log('Itens copiados:', itemsCopied, 'de', originalItems.length);
     
-    // Buscar nome da empresa de destino
+    // Buscar nomes das empresas
+    const sourceCompany = await dbGetAsync(`
+      SELECT c.name FROM companies c 
+      JOIN checklists ch ON ch.company_id = c.id 
+      WHERE ch.id = ?
+    `, [checklistId]);
     const targetCompany = await dbGetAsync(`SELECT name FROM companies WHERE id = ?`, [target_company_id]);
     
     res.json({
       success: true,
-      message: `Checklist copiado com sucesso para ${targetCompany?.name || 'empresa'}`,
+      message: `Checklist copiado com sucesso!`,
+      source_company: sourceCompany?.name || 'Origem',
+      target_company: targetCompany?.name || 'Destino',
       new_checklist_id: newChecklistId,
-      items_copied: originalItems.length
+      items_copied: itemsCopied,
+      total_items: originalItems.length
     });
   } catch (error) {
     console.error('Erro ao copiar checklist:', error);
