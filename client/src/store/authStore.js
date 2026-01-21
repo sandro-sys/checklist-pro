@@ -129,9 +129,9 @@ export const useAuthStore = create(
 
       fetchUser: async () => {
         try {
-          const { accessToken } = get()
+          const { accessToken, refreshToken } = get()
           if (!accessToken) {
-            set({ isLoading: false })
+            set({ isLoading: false, isAuthenticated: false })
             return
           }
           
@@ -144,15 +144,33 @@ export const useAuthStore = create(
             isLoading: false 
           })
         } catch (error) {
-          if (error.response?.status === 403) {
+          const { refreshToken: rToken } = get()
+          // Se o token expirou e temos refresh token, tenta renovar
+          if (error.response?.status === 403 && rToken) {
             try {
               await get().refreshAccessToken()
               await get().fetchUser()
             } catch {
-              set({ isLoading: false })
+              // Falhou o refresh, limpa tudo
+              set({ 
+                user: null,
+                accessToken: null,
+                refreshToken: null,
+                isAuthenticated: false,
+                isLoading: false 
+              })
+              delete api.defaults.headers.common['Authorization']
             }
           } else {
-            set({ isLoading: false })
+            // Qualquer outro erro, limpa a autenticação
+            set({ 
+              user: null,
+              accessToken: null,
+              refreshToken: null,
+              isAuthenticated: false,
+              isLoading: false 
+            })
+            delete api.defaults.headers.common['Authorization']
           }
         }
       },

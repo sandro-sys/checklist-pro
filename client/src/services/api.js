@@ -76,16 +76,7 @@ api.interceptors.response.use(
         return api(originalRequest)
       } catch (refreshError) {
         processQueue(refreshError, null)
-        
-        // Fazer logout se o refresh falhar
-        const { useAuthStore } = await import('../store/authStore')
-        useAuthStore.getState().logout()
-        
-        // Redirecionar para login
-        if (typeof window !== 'undefined') {
-          window.location.href = '/login'
-        }
-        
+        // Não faz redirect aqui - deixa o authStore cuidar disso
         return Promise.reject(refreshError)
       } finally {
         isRefreshing = false
