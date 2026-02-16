@@ -74,7 +74,7 @@ router.get('/dashboard', async (req, res) => {
       recentExecutions = await dbGetAsync(`
         SELECT COUNT(*) as count 
         FROM checklist_executions 
-        WHERE created_at >= ${dateSubtract(7)}
+        WHERE executed_at >= ${dateSubtract(7)}
       `) || { count: 0 };
     } catch (e) { console.error('Erro ao contar execuções recentes:', e.message); }
 
@@ -231,7 +231,7 @@ router.get('/companies/:companyId', async (req, res) => {
       const recentResult = await dbGetAsync(`
         SELECT COUNT(*) as count FROM checklist_executions ce 
         JOIN checklists ch ON ce.checklist_id = ch.id 
-        WHERE ch.company_id = ? AND ce.created_at >= ${dateSubtract(30)}
+        WHERE ch.company_id = ? AND ce.executed_at >= ${dateSubtract(30)}
       `, [companyId]);
       executions30d = recentResult?.count || 0;
     } catch (e) {
@@ -436,14 +436,14 @@ router.post('/impersonate/:companyId', async (req, res) => {
 router.get('/stats/executions', async (req, res) => {
   try {
     const { days = 30 } = req.query;
-    const dateFunc = isProduction ? 'DATE(created_at)' : 'DATE(created_at)';
+    const dateFunc = isProduction ? 'DATE(executed_at)' : 'DATE(executed_at)';
     
     const executions = await dbAllAsync(`
       SELECT 
         ${dateFunc} as date,
         COUNT(*) as count
       FROM checklist_executions
-      WHERE created_at >= ${dateSubtract(parseInt(days))}
+      WHERE executed_at >= ${dateSubtract(parseInt(days))}
       GROUP BY ${dateFunc}
       ORDER BY date ASC
     `);
@@ -501,12 +501,12 @@ router.get('/companies/:companyId/metrics', async (req, res) => {
     // Execuções por dia
     const executionsByDay = await dbAllAsync(`
       SELECT 
-        DATE(ce.created_at) as date,
+        DATE(ce.executed_at) as date,
         COUNT(*) as count
       FROM checklist_executions ce
       JOIN checklists ch ON ce.checklist_id = ch.id
-      WHERE ch.company_id = ? AND ce.created_at >= ${dateSubtract(parseInt(days))}
-      GROUP BY DATE(ce.created_at)
+      WHERE ch.company_id = ? AND ce.executed_at >= ${dateSubtract(parseInt(days))}
+      GROUP BY DATE(ce.executed_at)
       ORDER BY date ASC
     `, [companyId]);
     
@@ -517,7 +517,7 @@ router.get('/companies/:companyId/metrics', async (req, res) => {
       FROM execution_responses er
       JOIN checklist_executions ce ON er.execution_id = ce.id
       JOIN checklists ch ON ce.checklist_id = ch.id
-      WHERE ch.company_id = ? AND ce.created_at >= ${dateSubtract(parseInt(days))}
+      WHERE ch.company_id = ? AND ce.executed_at >= ${dateSubtract(parseInt(days))}
     `, [companyId]);
     
     // Checklists mais executados
@@ -551,14 +551,14 @@ router.get('/companies/:companyId/metrics', async (req, res) => {
     `, [companyId]);
     
     // Execuções por hora do dia
-    const hourExtract = isProduction ? 'EXTRACT(HOUR FROM ce.created_at)::INTEGER' : "CAST(strftime('%H', ce.created_at) AS INTEGER)";
+    const hourExtract = isProduction ? 'EXTRACT(HOUR FROM ce.executed_at)::INTEGER' : "CAST(strftime('%H', ce.executed_at) AS INTEGER)";
     const executionsByHour = await dbAllAsync(`
       SELECT 
         ${hourExtract} as hour,
         COUNT(*) as count
       FROM checklist_executions ce
       JOIN checklists ch ON ce.checklist_id = ch.id
-      WHERE ch.company_id = ? AND ce.created_at >= ${dateSubtract(parseInt(days))}
+      WHERE ch.company_id = ? AND ce.executed_at >= ${dateSubtract(parseInt(days))}
       GROUP BY ${hourExtract}
       ORDER BY hour ASC
     `, [companyId]);
