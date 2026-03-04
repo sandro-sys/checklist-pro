@@ -443,13 +443,15 @@ router.post('/activate-trial', authenticateToken, async (req, res) => {
   }
 });
 
-// Estatisticas de assinaturas (admin)
+// Estatisticas de assinaturas (admin/master)
 router.get('/admin/stats', authenticateToken, async (req, res) => {
   try {
-    // Verificar se e admin (owner de alguma empresa)
+    // Verificar se e admin (owner de alguma empresa) ou master
+    const user = await dbGetAsync('SELECT is_master FROM users WHERE id = ?', [req.user.id]);
     const company = await dbGetAsync('SELECT * FROM companies WHERE owner_id = ?', [req.user.id]);
-    if (!company) {
-      return res.status(403).json({ error: 'Acesso negado' });
+    
+    if (!company && !user?.is_master) {
+      return res.status(403).json({ error: 'Acesso negado. Apenas owners e masters podem acessar.' });
     }
 
     const stats = {
@@ -499,12 +501,15 @@ router.get('/admin/stats', authenticateToken, async (req, res) => {
   }
 });
 
-// Listar todas as assinaturas (admin)
+// Listar todas as assinaturas (admin/master)
 router.get('/admin/subscriptions', authenticateToken, async (req, res) => {
   try {
+    // Verificar se e admin (owner de alguma empresa) ou master
+    const user = await dbGetAsync('SELECT is_master FROM users WHERE id = ?', [req.user.id]);
     const company = await dbGetAsync('SELECT * FROM companies WHERE owner_id = ?', [req.user.id]);
-    if (!company) {
-      return res.status(403).json({ error: 'Acesso negado' });
+    
+    if (!company && !user?.is_master) {
+      return res.status(403).json({ error: 'Acesso negado. Apenas owners e masters podem acessar.' });
     }
 
     const subscriptions = await dbAllAsync(`
@@ -524,6 +529,34 @@ router.get('/admin/subscriptions', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Erro ao listar assinaturas:', error);
     res.status(500).json({ error: 'Erro ao listar assinaturas' });
+  }
+});
+
+// Listar todos os pagamentos (admin/master)
+router.get('/admin/payments', authenticateToken, async (req, res) => {
+  try {
+    // Verificar se e admin (owner de alguma empresa) ou master
+    const user = await dbGetAsync('SELECT is_master FROM users WHERE id = ?', [req.user.id]);
+    const company = await dbGetAsync('SELECT * FROM companies WHERE owner_id = ?', [req.user.id]);
+    
+    if (!company && !user?.is_master) {
+      return res.status(403).json({ error: 'Acesso negado. Apenas owners e masters podem acessar.' });
+    }
+
+    const payments = await dbAllAsync(`
+      SELECT 
+        p.*,
+        c.name as company_name
+      FROM payments p
+      LEFT JOIN companies c ON p.company_id = c.id
+      ORDER BY p.created_at DESC
+      LIMIT 100
+    `);
+
+    res.json(payments);
+  } catch (error) {
+    console.error('Erro ao listar pagamentos:', error);
+    res.status(500).json({ error: 'Erro ao listar pagamentos' });
   }
 });
 

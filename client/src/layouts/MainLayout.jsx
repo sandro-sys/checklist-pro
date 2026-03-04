@@ -21,7 +21,10 @@ import {
 } from 'lucide-react'
 import { useAuthStore } from '../store/authStore'
 
-const getMenuItems = (isMaster) => {
+const getMenuItems = (user) => {
+  const isMaster = user?.is_master
+  const isOwner = user?.role_type === 'owner'
+  
   const items = [
     { path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
     { path: '/checklists', icon: ClipboardList, label: 'Checklists' },
@@ -31,9 +34,14 @@ const getMenuItems = (isMaster) => {
     { path: '/reports', icon: FileText, label: 'Relatorios' },
     { path: '/support', icon: Headphones, label: 'Suporte' },
     { path: '/pricing', icon: CreditCard, label: 'Planos' },
-    { path: '/subscriptions', icon: CreditCard, label: 'Assinaturas' },
   ]
   
+  // Assinaturas visível apenas para owners e masters
+  if (isOwner || isMaster) {
+    items.push({ path: '/subscriptions', icon: CreditCard, label: 'Assinaturas' })
+  }
+  
+  // Painel Master visível apenas para masters
   if (isMaster) {
     items.push({ path: '/admin', icon: Crown, label: 'Painel Master', isMaster: true })
   }
@@ -72,7 +80,7 @@ export default function MainLayout() {
 
         {/* Navigation */}
         <nav className="flex-1 p-4 space-y-1">
-          {getMenuItems(user?.is_master).map((item) => {
+          {getMenuItems(user).map((item) => {
             const isActive = location.pathname === item.path
             return (
               <Link
@@ -170,7 +178,7 @@ export default function MainLayout() {
 
               {/* Navigation */}
               <nav className="flex-1 p-4 space-y-1">
-                {getMenuItems(user?.is_master).map((item) => {
+                {getMenuItems(user).map((item) => {
                   const isActive = location.pathname === item.path
                   return (
                     <Link

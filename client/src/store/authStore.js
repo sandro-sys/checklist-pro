@@ -62,21 +62,28 @@ export const useAuthStore = create(
         }
       },
 
-      logout: async () => {
-        try {
-          const { refreshToken } = get()
-          await api.post('/auth/logout', { refreshToken })
-        } catch (error) {
-          console.error('Erro no logout:', error)
-        } finally {
-          set({
-            user: null,
-            accessToken: null,
-            refreshToken: null,
-            isAuthenticated: false,
-            company: null
-          })
-          delete api.defaults.headers.common['Authorization']
+      logout: async (skipApiCall = false) => {
+        const { refreshToken } = get()
+        
+        // Limpa o estado PRIMEIRO para evitar loops
+        set({
+          user: null,
+          accessToken: null,
+          refreshToken: null,
+          isAuthenticated: false,
+          isLoading: false,
+          company: null
+        })
+        delete api.defaults.headers.common['Authorization']
+        
+        // Só tenta chamar a API se tiver token e não for skip
+        if (!skipApiCall && refreshToken) {
+          try {
+            await api.post('/auth/logout', { refreshToken })
+          } catch (error) {
+            // Ignora erros no logout - já limpamos o estado local
+            console.log('Logout API call failed (ignored):', error.message)
+          }
         }
       },
 

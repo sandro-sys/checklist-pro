@@ -126,14 +126,39 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// Formulário de contato
+// Formulário de contato (com validação LGPD)
 app.post('/api/contact', async (req, res) => {
   try {
-    const { name, email, phone, subject, message } = req.body;
+    const validator = (await import('validator')).default;
+    let { name, email, phone, subject, message } = req.body;
 
+    // Validações
     if (!name || !email || !phone || !subject || !message) {
       return res.status(400).json({ error: 'Todos os campos são obrigatórios' });
     }
+
+    // Sanitização dos dados (proteção contra XSS)
+    name = validator.escape(validator.trim(name));
+    email = validator.normalizeEmail(email) || email;
+    phone = validator.trim(phone).replace(/[^\d\s\-\(\)\+]/g, '');
+    subject = validator.escape(validator.trim(subject));
+    message = validator.escape(validator.trim(message));
+
+    // Validar email
+    if (!validator.isEmail(email)) {
+      return res.status(400).json({ error: 'Email inválido' });
+    }
+
+    // Validar telefone (mínimo 10 dígitos)
+    const phoneDigits = phone.replace(/\D/g, '');
+    if (phoneDigits.length < 10) {
+      return res.status(400).json({ error: 'Telefone inválido. Inclua o DDD.' });
+    }
+
+    // Limitar tamanho dos campos
+    if (name.length > 100) name = name.substring(0, 100);
+    if (subject.length > 200) subject = subject.substring(0, 200);
+    if (message.length > 2000) message = message.substring(0, 2000);
 
     // Salvar no banco de dados
     const { v4: uuidv4 } = await import('uuid');
@@ -144,15 +169,11 @@ app.post('/api/contact', async (req, res) => {
       VALUES (?, ?, ?, ?, ?, ?, ?)
     `, [id, name, email, phone, subject, message, new Date().toISOString()]);
 
-    // Log para acompanhamento
+    // Log para acompanhamento (sem dados sensíveis completos - LGPD)
     console.log('📩 Nova mensagem de contato:');
-    console.log(`   Nome: ${name}`);
-    console.log(`   Email: ${email}`);
-    console.log(`   Telefone: ${phone}`);
+    console.log(`   ID: ${id}`);
     console.log(`   Assunto: ${subject}`);
-    console.log(`   Mensagem: ${message.substring(0, 100)}...`);
-
-    // TODO: Enviar email de notificação para o admin
+    console.log(`   Data: ${new Date().toISOString()}`);
 
     res.json({ success: true, message: 'Mensagem enviada com sucesso!' });
   } catch (error) {

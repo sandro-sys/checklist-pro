@@ -21,17 +21,32 @@ export default function Subscriptions() {
       const [statsRes, subsRes, paymentsRes] = await Promise.all([
         api.get('/payments/admin/stats'),
         api.get('/payments/admin/subscriptions'),
-        api.get('/payments/payments')
+        api.get('/payments/admin/payments')
       ]);
       setStats(statsRes.data);
       setSubscriptions(subsRes.data);
       setPayments(paymentsRes.data);
     } catch (err) {
       console.error('Erro ao carregar dados:', err);
-      setError('Erro ao carregar dados de assinaturas');
+      if (err.response?.status === 403) {
+        setError('Acesso negado. Apenas proprietários de empresa e administradores podem acessar esta página.');
+      } else {
+        setError('Erro ao carregar dados de assinaturas');
+      }
     } finally {
       setLoading(false);
     }
+  };
+
+  // Mascara email para LGPD (mostra apenas parte do email)
+  const maskEmail = (email) => {
+    if (!email) return '-';
+    const [local, domain] = email.split('@');
+    if (!domain) return email;
+    const maskedLocal = local.length > 3 
+      ? local.substring(0, 3) + '***' 
+      : local.substring(0, 1) + '***';
+    return `${maskedLocal}@${domain}`;
   };
 
   const formatCurrency = (value) => {
@@ -227,11 +242,11 @@ export default function Subscriptions() {
           <div className="bg-gray-800 rounded-xl p-6">
             <h3 className="text-lg font-semibold text-white mb-4">Ultimas Assinaturas</h3>
             <div className="space-y-3">
-              {subscriptions.slice(0, 5).map((sub) => (
+                {subscriptions.slice(0, 5).map((sub) => (
                 <div key={sub.id} className="flex items-center justify-between p-3 bg-gray-700/50 rounded-lg">
                   <div>
                     <p className="text-white font-medium">{sub.company_name || 'Empresa'}</p>
-                    <p className="text-gray-400 text-sm">{sub.owner_email}</p>
+                    <p className="text-gray-400 text-sm">{maskEmail(sub.owner_email)}</p>
                   </div>
                   <div className="text-right">
                     {getPlanBadge(sub.plan)}
@@ -290,7 +305,7 @@ export default function Subscriptions() {
                     <td className="py-4 px-6">
                       <div>
                         <p className="text-white">{sub.owner_name || '-'}</p>
-                        <p className="text-gray-400 text-sm">{sub.owner_email}</p>
+                        <p className="text-gray-400 text-sm">{maskEmail(sub.owner_email)}</p>
                       </div>
                     </td>
                     <td className="py-4 px-6">{getPlanBadge(sub.plan)}</td>
