@@ -2,15 +2,24 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { AlertTriangle, CreditCard, Clock, Loader2 } from 'lucide-react'
 import api from '../services/api'
+import { useAuthStore } from '../store/authStore'
 
 export default function RequirePlan({ children }) {
+  const { user } = useAuthStore()
   const [loading, setLoading] = useState(true)
   const [subscription, setSubscription] = useState(null)
   const [error, setError] = useState(null)
 
+  // Master tem acesso total, não precisa verificar plano
+  const isMaster = user?.is_master
+
   useEffect(() => {
+    if (isMaster) {
+      setLoading(false)
+      return
+    }
     checkSubscription()
-  }, [])
+  }, [isMaster])
 
   const checkSubscription = async () => {
     try {
@@ -23,6 +32,11 @@ export default function RequirePlan({ children }) {
     } finally {
       setLoading(false)
     }
+  }
+
+  // Master sempre tem acesso
+  if (isMaster) {
+    return children
   }
 
   if (loading) {
