@@ -23,7 +23,6 @@ import { useAuthStore } from '../store/authStore'
 
 const getMenuItems = (user) => {
   const isMaster = user?.is_master
-  const isOwner = user?.role_type === 'owner'
   
   const items = [
     { path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
@@ -36,13 +35,9 @@ const getMenuItems = (user) => {
     { path: '/pricing', icon: CreditCard, label: 'Planos' },
   ]
   
-  // Assinaturas visível apenas para owners e masters
-  if (isOwner || isMaster) {
-    items.push({ path: '/subscriptions', icon: CreditCard, label: 'Assinaturas' })
-  }
-  
-  // Painel Master visível apenas para masters
+  // Assinaturas e Painel Master visíveis apenas para masters
   if (isMaster) {
+    items.push({ path: '/subscriptions', icon: CreditCard, label: 'Assinaturas' })
     items.push({ path: '/admin', icon: Crown, label: 'Painel Master', isMaster: true })
   }
   

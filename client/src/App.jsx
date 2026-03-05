@@ -5,6 +5,9 @@ import { useAuthStore } from './store/authStore'
 import MainLayout from './layouts/MainLayout'
 import AuthLayout from './layouts/AuthLayout'
 
+// Components
+import RequirePlan from './components/RequirePlan'
+
 // Pages
 import Login from './pages/Login'
 import Register from './pages/Register'
@@ -120,19 +123,22 @@ function App() {
           <MainLayout />
         </ProtectedRoute>
       }>
+        {/* Rotas que NÃO exigem plano (sempre acessíveis) */}
         <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/checklists" element={<Checklists />} />
-        <Route path="/checklists/create" element={<ChecklistCreate />} />
-        <Route path="/checklists/:id/edit" element={<ChecklistEdit />} />
-        <Route path="/checklists/:id/history" element={<ExecutionHistory />} />
         <Route path="/company" element={<Company />} />
-        <Route path="/team" element={<Team />} />
-        <Route path="/quick-actions" element={<QuickActions />} />
-        <Route path="/reports" element={<Reports />} />
         <Route path="/pricing" element={<Pricing />} />
-        <Route path="/subscriptions" element={<Subscriptions />} />
         <Route path="/support" element={<Support />} />
+        <Route path="/subscriptions" element={<Subscriptions />} />
         <Route path="/admin" element={<AdminDashboard />} />
+        
+        {/* Rotas que EXIGEM plano ativo */}
+        <Route path="/checklists" element={<RequirePlan><Checklists /></RequirePlan>} />
+        <Route path="/checklists/create" element={<RequirePlan><ChecklistCreate /></RequirePlan>} />
+        <Route path="/checklists/:id/edit" element={<RequirePlan><ChecklistEdit /></RequirePlan>} />
+        <Route path="/checklists/:id/history" element={<RequirePlan><ExecutionHistory /></RequirePlan>} />
+        <Route path="/team" element={<RequirePlan><Team /></RequirePlan>} />
+        <Route path="/quick-actions" element={<RequirePlan><QuickActions /></RequirePlan>} />
+        <Route path="/reports" element={<RequirePlan><Reports /></RequirePlan>} />
       </Route>
       
       {/* 404 */}
