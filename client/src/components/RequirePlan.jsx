@@ -49,9 +49,8 @@ export default function RequirePlan({ children }) {
     )
   }
 
-  const hasActivePlan = subscription?.plan && 
-    !subscription?.is_expired && 
-    subscription?.plan !== 'none'
+  // Verifica se tem plano ativo usando a flag do backend
+  const hasActivePlan = subscription?.is_active === true
 
   if (!hasActivePlan) {
     return (

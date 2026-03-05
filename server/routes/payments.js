@@ -72,15 +72,25 @@ router.get('/subscription', authenticateToken, async (req, res) => {
     `, [company.id]);
 
     const planInfo = PLANS[company.plan] || PLANS.trial;
-    const isExpired = company.plan_expires_at && new Date(company.plan_expires_at) < new Date();
+    const hasExpiration = !!company.plan_expires_at;
+    const isExpired = hasExpiration && new Date(company.plan_expires_at) < new Date();
+    
+    // Plano ativo se:
+    // - Trial: tem data de expiração E não está expirado
+    // - Pago: tem plano definido E não está expirado
+    const currentPlan = company.plan || null;
+    const isTrialActive = currentPlan === 'trial' && hasExpiration && !isExpired;
+    const isPaidActive = currentPlan && currentPlan !== 'trial' && !isExpired;
+    const isActive = isTrialActive || isPaidActive;
 
     res.json({
       company_id: company.id,
-      plan: company.plan || 'trial',
+      plan: currentPlan,
       plan_info: planInfo,
       expires_at: company.plan_expires_at,
       is_expired: isExpired,
-      is_active: !isExpired && company.plan !== 'trial',
+      is_active: isActive,
+      has_plan: !!currentPlan && hasExpiration,
       subscription: subscription
     });
   } catch (error) {
