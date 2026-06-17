@@ -306,6 +306,68 @@ async function initPostgres() {
     )
   `);
 
+  // Módulo de Estoque
+  await pgPool.query(`
+    CREATE TABLE IF NOT EXISTS products (
+      id TEXT PRIMARY KEY,
+      company_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      unit TEXT NOT NULL DEFAULT 'UN',
+      current_stock DECIMAL(10,3) DEFAULT 0,
+      min_stock DECIMAL(10,3) DEFAULT 0,
+      is_active INTEGER DEFAULT 1,
+      created_by TEXT NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  await pgPool.query(`
+    CREATE TABLE IF NOT EXISTS stock_lists (
+      id TEXT PRIMARY KEY,
+      company_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      type TEXT NOT NULL DEFAULT 'contagem',
+      status TEXT NOT NULL DEFAULT 'editing',
+      notes TEXT,
+      created_by TEXT NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      finalized_at TIMESTAMP,
+      finalized_by TEXT
+    )
+  `);
+
+  await pgPool.query(`
+    CREATE TABLE IF NOT EXISTS stock_list_items (
+      id TEXT PRIMARY KEY,
+      list_id TEXT NOT NULL,
+      product_id TEXT,
+      name TEXT NOT NULL,
+      unit TEXT,
+      quantity DECIMAL(10,3),
+      notes TEXT,
+      order_index INTEGER DEFAULT 0,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  await pgPool.query(`
+    CREATE TABLE IF NOT EXISTS stock_movements (
+      id TEXT PRIMARY KEY,
+      product_id TEXT NOT NULL,
+      company_id TEXT NOT NULL,
+      type TEXT NOT NULL,
+      quantity DECIMAL(10,3) NOT NULL,
+      previous_stock DECIMAL(10,3),
+      new_stock DECIMAL(10,3),
+      reason TEXT,
+      list_id TEXT,
+      user_id TEXT NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
   console.log('✅ Tabelas PostgreSQL criadas com sucesso!');
 }
 
@@ -569,6 +631,68 @@ async function initSQLite() {
       is_from_master INTEGER DEFAULT 0,
       parent_id TEXT,
       read_at TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  // Módulo de Estoque
+  db.run(`
+    CREATE TABLE IF NOT EXISTS products (
+      id TEXT PRIMARY KEY,
+      company_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      unit TEXT NOT NULL DEFAULT 'UN',
+      current_stock REAL DEFAULT 0,
+      min_stock REAL DEFAULT 0,
+      is_active INTEGER DEFAULT 1,
+      created_by TEXT NOT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS stock_lists (
+      id TEXT PRIMARY KEY,
+      company_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      type TEXT NOT NULL DEFAULT 'contagem',
+      status TEXT NOT NULL DEFAULT 'editing',
+      notes TEXT,
+      created_by TEXT NOT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      finalized_at TEXT,
+      finalized_by TEXT
+    )
+  `);
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS stock_list_items (
+      id TEXT PRIMARY KEY,
+      list_id TEXT NOT NULL,
+      product_id TEXT,
+      name TEXT NOT NULL,
+      unit TEXT,
+      quantity REAL,
+      notes TEXT,
+      order_index INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS stock_movements (
+      id TEXT PRIMARY KEY,
+      product_id TEXT NOT NULL,
+      company_id TEXT NOT NULL,
+      type TEXT NOT NULL,
+      quantity REAL NOT NULL,
+      previous_stock REAL,
+      new_stock REAL,
+      reason TEXT,
+      list_id TEXT,
+      user_id TEXT NOT NULL,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP
     )
   `);

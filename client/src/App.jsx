@@ -31,6 +31,10 @@ import Terms from './pages/Terms'
 import ChangePassword from './pages/ChangePassword'
 import AdminDashboard from './pages/AdminDashboard'
 import Support from './pages/Support'
+import StockProducts from './pages/StockProducts'
+import StockLists from './pages/StockLists'
+import StockListEdit from './pages/StockListEdit'
+import StockHistory from './pages/StockHistory'
 
 // Protected Route Component
 function ProtectedRoute({ children }) {
@@ -139,6 +143,10 @@ function App() {
         <Route path="/team" element={<RequirePlan><Team /></RequirePlan>} />
         <Route path="/quick-actions" element={<RequirePlan><QuickActions /></RequirePlan>} />
         <Route path="/reports" element={<RequirePlan><Reports /></RequirePlan>} />
+        <Route path="/estoque/produtos" element={<RequirePlan><StockProducts /></RequirePlan>} />
+        <Route path="/estoque/listas" element={<RequirePlan><StockLists /></RequirePlan>} />
+        <Route path="/estoque/listas/:id" element={<RequirePlan><StockListEdit /></RequirePlan>} />
+        <Route path="/estoque/historico" element={<RequirePlan><StockHistory /></RequirePlan>} />
       </Route>
       
       {/* 404 */}
