@@ -125,10 +125,15 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ error: 'Email e senha são obrigatórios' });
     }
 
+    // [B6] Subquery evita duplicação de linha quando usuário tem company_id E é owner
     const user = await dbGetAsync(`
-      SELECT u.*, c.id as company_id, c.name as company_name 
-      FROM users u 
-      LEFT JOIN companies c ON u.company_id = c.id OR c.owner_id = u.id
+      SELECT u.*,
+        COALESCE(u.company_id, (SELECT id   FROM companies WHERE owner_id = u.id LIMIT 1)) as company_id,
+        COALESCE(
+          (SELECT name FROM companies WHERE id = u.company_id LIMIT 1),
+          (SELECT name FROM companies WHERE owner_id = u.id  LIMIT 1)
+        ) as company_name
+      FROM users u
       WHERE u.email = ?
     `, [email.toLowerCase()]);
 
@@ -141,13 +146,15 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ error: 'Credenciais inválidas' });
     }
 
-    // Gerar tokens
+    // [B4] Usar role_type (campo correto) — user.role era sempre undefined
+    const roleType = user.role_type || 'user';
+
     const accessToken = jwt.sign(
-      { 
-        id: user.id, 
-        email: user.email, 
-        name: user.name, 
-        role: user.role,
+      {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: roleType,
         company_id: user.company_id,
         is_master: user.is_master === 1
       },
@@ -161,25 +168,29 @@ router.post('/login', async (req, res) => {
       { expiresIn: '7d' }
     );
 
-    // Salvar refresh token
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
     await dbRunAsync(`
       INSERT INTO refresh_tokens (id, user_id, token, expires_at)
       VALUES (?, ?, ?, ?)
     `, [uuidv4(), user.id, refreshToken, expiresAt]);
 
-    // Log de auditoria
+    // [B5] Atualizar last_login
+    await dbRunAsync(
+      `UPDATE users SET last_login = ? WHERE id = ?`,
+      [new Date().toISOString(), user.id]
+    );
+
     await dbRunAsync(`
       INSERT INTO audit_logs (id, user_id, action, entity_type, entity_id, details)
       VALUES (?, ?, 'LOGIN', 'user', ?, ?)
     `, [uuidv4(), user.id, user.id, JSON.stringify({ action: 'user_login' })]);
 
     res.json({
-      user: { 
-        id: user.id, 
-        email: user.email, 
-        name: user.name, 
-        role: user.role,
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: roleType,
         company_id: user.company_id,
         company_name: user.company_name,
         must_change_password: user.must_change_password === 1,
@@ -463,11 +474,13 @@ router.post('/refresh', async (req, res) => {
       return res.status(401).json({ error: 'Refresh token não fornecido' });
     }
 
-    const storedToken = await dbGetAsync(`
-      SELECT * FROM refresh_tokens WHERE token = ? AND expires_at > NOW()
-    `, [refreshToken]);
+    // [B3] Comparação de data no lado da aplicação — evita NOW() que não existe no SQLite
+    const storedToken = await dbGetAsync(
+      `SELECT * FROM refresh_tokens WHERE token = ?`,
+      [refreshToken]
+    );
 
-    if (!storedToken) {
+    if (!storedToken || new Date(storedToken.expires_at) <= new Date()) {
       return res.status(403).json({ error: 'Refresh token inválido ou expirado' });
     }
 
@@ -476,41 +489,65 @@ router.post('/refresh', async (req, res) => {
         return res.status(403).json({ error: 'Refresh token inválido' });
       }
 
-      const user = await dbGetAsync(`
-        SELECT u.*, c.id as company_id 
-        FROM users u 
-        LEFT JOIN companies c ON u.company_id = c.id OR c.owner_id = u.id
-        WHERE u.id = ?
-      `, [decoded.id]);
+      try {
+        // [B6] Subquery sem JOIN ambíguo
+        const user = await dbGetAsync(`
+          SELECT u.*,
+            COALESCE(u.company_id, (SELECT id FROM companies WHERE owner_id = u.id LIMIT 1)) as company_id
+          FROM users u
+          WHERE u.id = ?
+        `, [decoded.id]);
 
-      if (!user) {
-        return res.status(404).json({ error: 'Usuário não encontrado' });
-      }
-
-      const newAccessToken = jwt.sign(
-        { 
-          id: user.id, 
-          email: user.email, 
-          name: user.name, 
-          role: user.role,
-          company_id: user.company_id,
-          is_master: user.is_master === 1
-        },
-        process.env.JWT_SECRET,
-        { expiresIn: '15m' }
-      );
-
-      res.json({ 
-        accessToken: newAccessToken,
-        user: {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          role: user.role,
-          company_id: user.company_id,
-          is_master: user.is_master === 1
+        if (!user) {
+          return res.status(404).json({ error: 'Usuário não encontrado' });
         }
-      });
+
+        // [B7] Rotação do refresh token — invalida o antigo e emite um novo
+        await dbRunAsync('DELETE FROM refresh_tokens WHERE token = ?', [refreshToken]);
+
+        const newRefreshToken = jwt.sign(
+          { id: user.id },
+          process.env.JWT_REFRESH_SECRET,
+          { expiresIn: '7d' }
+        );
+        const newExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+        await dbRunAsync(
+          `INSERT INTO refresh_tokens (id, user_id, token, expires_at) VALUES (?, ?, ?, ?)`,
+          [uuidv4(), user.id, newRefreshToken, newExpiresAt]
+        );
+
+        // [B4] Usar role_type
+        const roleType = user.role_type || 'user';
+
+        const newAccessToken = jwt.sign(
+          {
+            id: user.id,
+            email: user.email,
+            name: user.name,
+            role: roleType,
+            company_id: user.company_id,
+            is_master: user.is_master === 1
+          },
+          process.env.JWT_SECRET,
+          { expiresIn: '15m' }
+        );
+
+        res.json({
+          accessToken: newAccessToken,
+          refreshToken: newRefreshToken,
+          user: {
+            id: user.id,
+            email: user.email,
+            name: user.name,
+            role: roleType,
+            company_id: user.company_id,
+            is_master: user.is_master === 1
+          }
+        });
+      } catch (innerError) {
+        console.error('Erro interno no refresh:', innerError);
+        return res.status(500).json({ error: 'Erro ao atualizar token' });
+      }
     });
   } catch (error) {
     console.error('Erro no refresh:', error);
@@ -543,11 +580,14 @@ router.post('/logout', authenticateToken, async (req, res) => {
 // Obter perfil do usuário
 router.get('/me', authenticateToken, async (req, res) => {
   try {
+    // [B6] Subquery sem JOIN ambíguo
     const user = await dbGetAsync(`
       SELECT u.id, u.email, u.name, u.role_type, u.company_id, u.is_master, u.created_at,
-             c.name as company_name
+        COALESCE(
+          (SELECT name FROM companies WHERE id = u.company_id LIMIT 1),
+          (SELECT name FROM companies WHERE owner_id = u.id  LIMIT 1)
+        ) as company_name
       FROM users u
-      LEFT JOIN companies c ON u.company_id = c.id OR c.owner_id = u.id
       WHERE u.id = ?
     `, [req.user.id]);
 

@@ -29,11 +29,11 @@
 | B1 | Atualização de itens de checklist sem transação (risco de perda de dados) | 🔴 Crítico | ✅ Corrigido |
 | B2 | Criação de itens de checklist sem transação | 🔴 Crítico | ✅ Corrigido |
 | M1 | Migração: todos usuários forçados a trocar senha (exceto sandro@rhumarh.com) | 🔴 Crítico | ✅ Corrigido |
-| B3 | `NOW()` no SQLite — refresh token sempre falha em dev | 🟡 Médio | ⬜ Pendente |
-| B4 | Campo `role` vs `role_type` no JWT — role sempre undefined | 🟡 Médio | ⬜ Pendente |
-| B5 | Login não atualiza `last_login` | 🟡 Médio | ⬜ Pendente |
-| B6 | JOIN ambíguo no login pode retornar usuário errado | 🟡 Médio | ⬜ Pendente |
-| B7 | Refresh token sem rotação | 🟡 Médio | ⬜ Pendente |
+| B3 | `NOW()` no SQLite — refresh token sempre falha em dev | 🟡 Médio | ✅ Corrigido |
+| B4 | Campo `role` vs `role_type` no JWT — role sempre undefined | 🟡 Médio | ✅ Corrigido |
+| B5 | Login não atualiza `last_login` | 🟡 Médio | ✅ Corrigido |
+| B6 | JOIN ambíguo no login pode retornar usuário errado | 🟡 Médio | ✅ Corrigido |
+| B7 | Refresh token sem rotação | 🟡 Médio | ✅ Corrigido |
 | UX1 | Senha temporária retornada em texto na API | 🟠 Baixo | ⬜ Pendente |
 | UX2 | Sem paginação em listagens | 🟠 Baixo | ⬜ Pendente |
 | F1 | Módulo de Controle de Estoque | 🟢 Feature | ⬜ Pendente |

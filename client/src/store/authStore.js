@@ -91,16 +91,18 @@ export const useAuthStore = create(
         try {
           const { refreshToken, user: currentUser } = get()
           if (!refreshToken) throw new Error('No refresh token')
-          
+
           const response = await api.post('/auth/refresh', { refreshToken })
-          const { accessToken, user: updatedUser } = response.data
-          
-          set({ 
+          const { accessToken, refreshToken: newRefreshToken, user: updatedUser } = response.data
+
+          // [B7] Salvar o novo refreshToken gerado pela rotação
+          set({
             accessToken,
+            refreshToken: newRefreshToken || refreshToken,
             user: updatedUser ? { ...currentUser, ...updatedUser } : currentUser
           })
           api.defaults.headers.common['Authorization'] = `Bearer ${accessToken}`
-          
+
           return accessToken
         } catch (error) {
           get().logout()
