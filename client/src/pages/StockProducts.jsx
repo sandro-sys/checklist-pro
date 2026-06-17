@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
-import { Plus, Edit2, Trash2, AlertTriangle, Package, X, Check, Search } from 'lucide-react'
+import { Plus, Edit2, Trash2, AlertTriangle, Package, X, Check, Search, Download } from 'lucide-react'
 import api from '../services/api'
 import toast from 'react-hot-toast'
+import { RESTAURANT_PRODUCTS, TOTAL_PRODUCTS } from '../data/restaurantProducts'
 
 const UNITS = ['UN', 'KG', 'G', 'L', 'ML', 'CX', 'SC', 'PC', 'DZ', 'MT']
 
@@ -159,6 +160,128 @@ function MovementModal({ product, onClose, onSave }) {
   )
 }
 
+function ImportModal({ existingNames, onClose, onDone }) {
+  const [selected, setSelected] = useState(() => {
+    const init = {}
+    RESTAURANT_PRODUCTS.forEach(g => g.items.forEach(item => { init[item.name] = true }))
+    return init
+  })
+  const [importing, setImporting] = useState(false)
+  const [progress, setProgress] = useState(null)
+
+  const toggleItem = (name) => setSelected(prev => ({ ...prev, [name]: !prev[name] }))
+  const toggleGroup = (group) => {
+    const names = group.items.map(i => i.name)
+    const allOn = names.every(n => selected[n])
+    setSelected(prev => { const s = { ...prev }; names.forEach(n => s[n] = !allOn); return s })
+  }
+
+  const toImport = RESTAURANT_PRODUCTS.flatMap(g => g.items).filter(i => selected[i.name] && !existingNames.has(i.name))
+  const alreadyExist = RESTAURANT_PRODUCTS.flatMap(g => g.items).filter(i => selected[i.name] && existingNames.has(i.name))
+
+  const handleImport = async () => {
+    if (toImport.length === 0) return toast.error('Nenhum produto novo para importar')
+    setImporting(true)
+    let ok = 0, fail = 0
+    for (let i = 0; i < toImport.length; i++) {
+      setProgress({ current: i + 1, total: toImport.length, name: toImport[i].name })
+      try {
+        await api.post('/stock/products', toImport[i])
+        ok++
+      } catch {
+        fail++
+      }
+    }
+    setImporting(false)
+    setProgress(null)
+    if (ok > 0) toast.success(`${ok} produto(s) importado(s) com sucesso!`)
+    if (fail > 0) toast.error(`${fail} produto(s) falharam`)
+    onDone()
+  }
+
+  const selectedCount = Object.values(selected).filter(Boolean).length
+  const newCount = toImport.length
+
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-dark-800 border border-dark-700 rounded-2xl w-full max-w-2xl shadow-2xl flex flex-col max-h-[90vh]">
+        <div className="flex items-start justify-between p-6 border-b border-dark-700 flex-shrink-0">
+          <div>
+            <h2 className="text-lg font-bold text-white">Importar Lista Padrão de Restaurante</h2>
+            <p className="text-sm text-dark-400 mt-1">
+              {TOTAL_PRODUCTS} produtos em {RESTAURANT_PRODUCTS.length} grupos —
+              <span className="text-primary-400 ml-1">{newCount} novos para importar</span>
+              {alreadyExist.length > 0 && <span className="text-dark-500 ml-1">({alreadyExist.length} já cadastrados)</span>}
+            </p>
+          </div>
+          <button onClick={onClose} className="p-2 text-dark-400 hover:text-white rounded-lg flex-shrink-0"><X className="w-5 h-5" /></button>
+        </div>
+
+        <div className="overflow-y-auto flex-1 p-6 space-y-5">
+          {RESTAURANT_PRODUCTS.map(group => {
+            const allOn = group.items.every(i => selected[i.name])
+            const someOn = group.items.some(i => selected[i.name])
+            return (
+              <div key={group.group}>
+                <button onClick={() => toggleGroup(group)}
+                  className="flex items-center gap-2 mb-2 w-full text-left group">
+                  <div className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 transition-colors ${allOn ? 'bg-primary-500 border-primary-500' : someOn ? 'bg-primary-500/40 border-primary-500/40' : 'border-dark-500'}`}>
+                    {(allOn || someOn) && <Check className="w-3 h-3 text-white" />}
+                  </div>
+                  <span className="text-sm font-semibold text-white group-hover:text-primary-400 transition-colors">{group.group}</span>
+                  <span className="text-xs text-dark-500">({group.items.length} produtos)</span>
+                </button>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 pl-6">
+                  {group.items.map(item => {
+                    const exists = existingNames.has(item.name)
+                    return (
+                      <button key={item.name} onClick={() => !exists && toggleItem(item.name)}
+                        className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-left transition-colors ${exists ? 'opacity-40 cursor-not-allowed' : 'hover:bg-dark-700'}`}>
+                        <div className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 transition-colors ${selected[item.name] && !exists ? 'bg-primary-500 border-primary-500' : 'border-dark-600'}`}>
+                          {selected[item.name] && !exists && <Check className="w-3 h-3 text-white" />}
+                          {exists && <Check className="w-3 h-3 text-dark-400" />}
+                        </div>
+                        <span className="text-sm text-dark-200 flex-1">{item.name}</span>
+                        <span className="text-xs text-dark-500">{item.unit}</span>
+                        {exists && <span className="text-xs text-dark-500 italic">existente</span>}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+
+        {importing && progress && (
+          <div className="px-6 py-3 border-t border-dark-700 flex-shrink-0">
+            <div className="flex items-center justify-between text-sm mb-1">
+              <span className="text-dark-400 truncate">{progress.name}</span>
+              <span className="text-white font-medium ml-3">{progress.current}/{progress.total}</span>
+            </div>
+            <div className="w-full bg-dark-700 rounded-full h-1.5">
+              <div className="bg-gradient-to-r from-primary-500 to-accent-teal h-1.5 rounded-full transition-all"
+                style={{ width: `${(progress.current / progress.total) * 100}%` }} />
+            </div>
+          </div>
+        )}
+
+        <div className="flex gap-3 p-6 border-t border-dark-700 flex-shrink-0">
+          <button onClick={onClose} disabled={importing}
+            className="flex-1 py-3 rounded-xl border border-dark-600 text-dark-300 hover:text-white transition-colors disabled:opacity-50">
+            Cancelar
+          </button>
+          <button onClick={handleImport} disabled={importing || newCount === 0}
+            className="flex-1 py-3 rounded-xl bg-gradient-to-r from-primary-500 to-accent-teal text-white font-semibold hover:shadow-lg hover:shadow-primary-500/25 transition-all disabled:opacity-50 flex items-center justify-center gap-2">
+            <Download className="w-4 h-4" />
+            {importing ? 'Importando...' : `Importar ${newCount} produto${newCount !== 1 ? 's' : ''}`}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function StockProducts() {
   const [products, setProducts] = useState([])
   const [loading, setLoading] = useState(true)
@@ -166,6 +289,7 @@ export default function StockProducts() {
   const [modalProduct, setModalProduct] = useState(undefined)
   const [movProduct, setMovProduct] = useState(null)
   const [showInactive, setShowInactive] = useState(false)
+  const [showImport, setShowImport] = useState(false)
 
   const load = async () => {
     setLoading(true)
@@ -202,9 +326,14 @@ export default function StockProducts() {
           <h1 className="text-2xl font-bold text-white">Produtos / Ingredientes</h1>
           <p className="text-dark-400 text-sm mt-1">{products.filter(p => p.is_active).length} produtos cadastrados</p>
         </div>
-        <button onClick={() => setModalProduct(null)} className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-primary-500 to-accent-teal text-white font-semibold rounded-xl hover:shadow-lg hover:shadow-primary-500/25 transition-all">
-          <Plus className="w-4 h-4" /> Novo Produto
-        </button>
+        <div className="flex gap-2">
+          <button onClick={() => setShowImport(true)} className="flex items-center gap-2 px-4 py-2.5 bg-dark-800 border border-dark-700 text-dark-300 hover:text-white hover:border-dark-600 rounded-xl transition-all text-sm">
+            <Download className="w-4 h-4" /> Importar Padrão
+          </button>
+          <button onClick={() => setModalProduct(null)} className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-primary-500 to-accent-teal text-white font-semibold rounded-xl hover:shadow-lg hover:shadow-primary-500/25 transition-all">
+            <Plus className="w-4 h-4" /> Novo Produto
+          </button>
+        </div>
       </div>
 
       {belowMin.length > 0 && (
@@ -314,6 +443,13 @@ export default function StockProducts() {
       )}
       {movProduct && (
         <MovementModal product={movProduct} onClose={() => setMovProduct(null)} onSave={() => { setMovProduct(null); load() }} />
+      )}
+      {showImport && (
+        <ImportModal
+          existingNames={new Set(products.map(p => p.name))}
+          onClose={() => setShowImport(false)}
+          onDone={() => { setShowImport(false); load() }}
+        />
       )}
     </div>
   )

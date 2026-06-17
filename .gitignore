@@ -8,7 +8,7 @@ client/node_modules/
 .env.production
 
 # Database (local)
-data/
+/data/
 *.db
 
 # Build output
