@@ -313,6 +313,7 @@ async function initPostgres() {
       company_id TEXT NOT NULL,
       name TEXT NOT NULL,
       unit TEXT NOT NULL DEFAULT 'UN',
+      category TEXT DEFAULT 'Outros',
       current_stock DECIMAL(10,3) DEFAULT 0,
       min_stock DECIMAL(10,3) DEFAULT 0,
       is_active INTEGER DEFAULT 1,
@@ -321,6 +322,9 @@ async function initPostgres() {
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `);
+
+  // Migração additive: adicionar category se não existir
+  try { await pgPool.query(`ALTER TABLE products ADD COLUMN category TEXT DEFAULT 'Outros'`); } catch (_) {}
 
   await pgPool.query(`
     CREATE TABLE IF NOT EXISTS stock_lists (
@@ -642,6 +646,7 @@ async function initSQLite() {
       company_id TEXT NOT NULL,
       name TEXT NOT NULL,
       unit TEXT NOT NULL DEFAULT 'UN',
+      category TEXT DEFAULT 'Outros',
       current_stock REAL DEFAULT 0,
       min_stock REAL DEFAULT 0,
       is_active INTEGER DEFAULT 1,
@@ -650,6 +655,9 @@ async function initSQLite() {
       updated_at TEXT DEFAULT CURRENT_TIMESTAMP
     )
   `);
+
+  // Migração additive: adicionar category se não existir
+  try { db.run(`ALTER TABLE products ADD COLUMN category TEXT DEFAULT 'Outros'`); } catch (_) {}
 
   db.run(`
     CREATE TABLE IF NOT EXISTS stock_lists (

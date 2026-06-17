@@ -33,7 +33,7 @@ router.get('/products', async (req, res) => {
 router.post('/products', async (req, res) => {
   if (!guardCompany(req, res)) return;
   try {
-    const { name, unit, min_stock } = req.body;
+    const { name, unit, min_stock, category } = req.body;
     if (!name || !unit) return res.status(400).json({ error: 'Nome e unidade são obrigatórios' });
 
     const normalizedName = name.toUpperCase().trim();
@@ -45,9 +45,9 @@ router.post('/products', async (req, res) => {
 
     const id = uuidv4();
     await dbRunAsync(
-      `INSERT INTO products (id, company_id, name, unit, current_stock, min_stock, is_active, created_by)
-       VALUES (?, ?, ?, ?, 0, ?, 1, ?)`,
-      [id, req.user.company_id, normalizedName, unit.toUpperCase().trim(), parseFloat(min_stock) || 0, req.user.id]
+      `INSERT INTO products (id, company_id, name, unit, category, current_stock, min_stock, is_active, created_by)
+       VALUES (?, ?, ?, ?, ?, 0, ?, 1, ?)`,
+      [id, req.user.company_id, normalizedName, unit.toUpperCase().trim(), category || 'Outros', parseFloat(min_stock) || 0, req.user.id]
     );
     res.status(201).json({ message: 'Produto criado', product: await dbGetAsync(`SELECT * FROM products WHERE id = ?`, [id]) });
   } catch (e) {
@@ -60,15 +60,16 @@ router.put('/products/:id', async (req, res) => {
   if (!guardCompany(req, res)) return;
   try {
     const { id } = req.params;
-    const { name, unit, min_stock } = req.body;
+    const { name, unit, min_stock, category } = req.body;
     const product = await dbGetAsync(`SELECT * FROM products WHERE id = ? AND company_id = ?`, [id, req.user.company_id]);
     if (!product) return res.status(404).json({ error: 'Produto não encontrado' });
 
     await dbRunAsync(
-      `UPDATE products SET name = ?, unit = ?, min_stock = ?, updated_at = ? WHERE id = ?`,
+      `UPDATE products SET name = ?, unit = ?, category = ?, min_stock = ?, updated_at = ? WHERE id = ?`,
       [
         name ? name.toUpperCase().trim() : product.name,
         unit ? unit.toUpperCase().trim() : product.unit,
+        category !== undefined ? category : product.category,
         min_stock !== undefined ? parseFloat(min_stock) : product.min_stock,
         new Date().toISOString(), id
       ]

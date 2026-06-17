@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { Plus, Edit2, Trash2, AlertTriangle, Package, X, Check, Search, Download } from 'lucide-react'
 import api from '../services/api'
 import toast from 'react-hot-toast'
-import { RESTAURANT_PRODUCTS, TOTAL_PRODUCTS } from '../data/restaurantProducts'
+import { RESTAURANT_PRODUCTS, TOTAL_PRODUCTS, PRODUCT_CATEGORIES } from '../data/restaurantProducts'
 
 const UNITS = ['UN', 'KG', 'G', 'L', 'ML', 'CX', 'SC', 'PC', 'DZ', 'MT']
 
@@ -10,6 +10,7 @@ function ProductModal({ product, onClose, onSave }) {
   const [form, setForm] = useState({
     name: product?.name || '',
     unit: product?.unit || 'UN',
+    category: product?.category || 'Outros',
     min_stock: product?.min_stock ?? 0
   })
   const [saving, setSaving] = useState(false)
@@ -50,6 +51,16 @@ function ProductModal({ product, onClose, onSave }) {
               value={form.name}
               onChange={e => setForm({ ...form, name: e.target.value.toUpperCase() })}
             />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-dark-300 mb-1">Categoria</label>
+            <select
+              className="w-full bg-dark-700 border border-dark-600 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary-500"
+              value={form.category}
+              onChange={e => setForm({ ...form, category: e.target.value })}
+            >
+              {PRODUCT_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -290,6 +301,7 @@ export default function StockProducts() {
   const [movProduct, setMovProduct] = useState(null)
   const [showInactive, setShowInactive] = useState(false)
   const [showImport, setShowImport] = useState(false)
+  const [filterCategory, setFilterCategory] = useState('')
 
   const load = async () => {
     setLoading(true)
@@ -316,7 +328,10 @@ export default function StockProducts() {
     }
   }
 
-  const filtered = products.filter(p => p.name.includes(search.toUpperCase()) || (p.unit || '').includes(search.toUpperCase()))
+  const filtered = products.filter(p =>
+    (p.name.includes(search.toUpperCase()) || (p.unit || '').includes(search.toUpperCase())) &&
+    (!filterCategory || p.category === filterCategory)
+  )
   const belowMin = products.filter(p => p.is_active && parseFloat(p.current_stock) < parseFloat(p.min_stock) && parseFloat(p.min_stock) > 0)
 
   return (
@@ -351,8 +366,8 @@ export default function StockProducts() {
         </div>
       )}
 
-      <div className="flex items-center gap-3">
-        <div className="relative flex-1 max-w-sm">
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative flex-1 min-w-[200px] max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-400" />
           <input
             className="w-full bg-dark-800 border border-dark-700 rounded-xl pl-10 pr-4 py-2.5 text-white placeholder-dark-400 focus:outline-none focus:border-primary-500 text-sm uppercase"
@@ -361,6 +376,14 @@ export default function StockProducts() {
             onChange={e => setSearch(e.target.value.toUpperCase())}
           />
         </div>
+        <select
+          className="bg-dark-800 border border-dark-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-primary-500"
+          value={filterCategory}
+          onChange={e => setFilterCategory(e.target.value)}
+        >
+          <option value="">Todas as categorias</option>
+          {PRODUCT_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+        </select>
         <label className="flex items-center gap-2 text-sm text-dark-400 cursor-pointer">
           <input type="checkbox" checked={showInactive} onChange={e => setShowInactive(e.target.checked)} className="rounded" />
           Ver inativos
@@ -373,6 +396,7 @@ export default function StockProducts() {
             <thead>
               <tr className="border-b border-dark-700">
                 <th className="text-left px-6 py-4 text-xs font-semibold text-dark-400 uppercase tracking-wider">Produto</th>
+                <th className="text-left px-4 py-4 text-xs font-semibold text-dark-400 uppercase tracking-wider hidden md:table-cell">Categoria</th>
                 <th className="text-center px-4 py-4 text-xs font-semibold text-dark-400 uppercase tracking-wider">Unid.</th>
                 <th className="text-right px-4 py-4 text-xs font-semibold text-dark-400 uppercase tracking-wider">Saldo Atual</th>
                 <th className="text-right px-4 py-4 text-xs font-semibold text-dark-400 uppercase tracking-wider">Mínimo</th>
@@ -384,7 +408,7 @@ export default function StockProducts() {
               {loading ? (
                 <tr><td colSpan={6} className="py-12 text-center text-dark-400">Carregando...</td></tr>
               ) : filtered.length === 0 ? (
-                <tr><td colSpan={6} className="py-12 text-center">
+                <tr><td colSpan={7} className="py-12 text-center">
                   <Package className="w-10 h-10 text-dark-600 mx-auto mb-3" />
                   <p className="text-dark-400">Nenhum produto encontrado</p>
                   <button onClick={() => setModalProduct(null)} className="mt-3 text-primary-400 hover:text-primary-300 text-sm">+ Cadastrar produto</button>
@@ -398,6 +422,9 @@ export default function StockProducts() {
                         <span className="text-white font-medium">{p.name}</span>
                         {isLow && <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0" />}
                       </div>
+                    </td>
+                    <td className="px-4 py-4 hidden md:table-cell">
+                      <span className="text-xs px-2 py-1 rounded-full bg-dark-700 text-dark-300">{p.category || 'Outros'}</span>
                     </td>
                     <td className="px-4 py-4 text-center text-dark-300 text-sm">{p.unit}</td>
                     <td className="px-4 py-4 text-right">
