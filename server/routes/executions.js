@@ -80,6 +80,11 @@ router.post('/:executionId/responses', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'Execução não encontrada' });
     }
 
+    // [S7] Verificar propriedade da execução
+    if (execution.executed_by !== req.user.id && !req.user.is_master) {
+      return res.status(403).json({ error: 'Acesso negado' });
+    }
+
     // Verificar se já existe resposta para este item
     const existingResponse = await dbGetAsync(`
       SELECT * FROM execution_responses WHERE execution_id = ? AND item_id = ?

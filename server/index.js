@@ -20,7 +20,7 @@ import adminRoutes from './routes/admin.js';
 import supportRoutes from './routes/support.js';
 
 // Database
-import { initDatabase, dbRunAsync, dbGetAsync } from './database/init.js';
+import { initDatabase, dbRunAsync, dbGetAsync, runOneTimeMigrations } from './database/init.js';
 
 dotenv.config();
 
@@ -44,16 +44,17 @@ const allowedOrigins = [
 
 app.use(cors({
   origin: function(origin, callback) {
-    // Permitir requests sem origin (mobile apps, curl, etc)
+    // Permitir requests sem origin (mobile apps, Postman, etc)
     if (!origin) return callback(null, true);
     if (allowedOrigins.includes(origin)) {
       return callback(null, true);
     }
-    // Em producao, permitir qualquer subdominio do render
+    // Permitir subdominios do render em producao
     if (process.env.NODE_ENV === 'production' && origin.includes('.onrender.com')) {
       return callback(null, true);
     }
-    return callback(null, true); // Temporariamente permitir todos
+    console.warn(`[CORS] Origem bloqueada: ${origin}`);
+    return callback(new Error('Origem não permitida pelo CORS'));
   },
   credentials: true
 }));
@@ -80,7 +81,7 @@ app.post('/api/admin/create-master', async (req, res) => {
     const { email, secret } = req.body;
     
     // Verificar secret para proteger o endpoint
-    if (secret !== process.env.ADMIN_SECRET && secret !== 'create-master-2024') {
+    if (!process.env.ADMIN_SECRET || secret !== process.env.ADMIN_SECRET) {
       return res.status(403).json({ error: 'Acesso negado' });
     }
     
@@ -188,7 +189,7 @@ app.post('/api/admin/force-password-migration', async (req, res) => {
     const { secret } = req.body;
     
     // Verificar secret para proteger o endpoint
-    if (secret !== process.env.ADMIN_SECRET && secret !== 'migrate-passwords-2024') {
+    if (!process.env.ADMIN_SECRET || secret !== process.env.ADMIN_SECRET) {
       return res.status(403).json({ error: 'Acesso negado' });
     }
     
@@ -221,9 +222,19 @@ app.use((err, req, res, next) => {
 
 // Initialize database and start server
 async function startServer() {
+  // Validar variáveis de ambiente críticas antes de iniciar
+  const requiredEnvVars = ['JWT_SECRET', 'JWT_REFRESH_SECRET'];
+  const missing = requiredEnvVars.filter(v => !process.env[v]);
+  if (missing.length > 0) {
+    console.error(`❌ FATAL: Variáveis de ambiente obrigatórias não configuradas: ${missing.join(', ')}`);
+    console.error('   Defina-as no painel do Render (Environment) ou no arquivo .env local.');
+    process.exit(1);
+  }
+
   try {
     await initDatabase();
-    
+    await runOneTimeMigrations();
+
     app.listen(PORT, () => {
       console.log(`🚀 Servidor rodando na porta ${PORT}`);
       console.log(`📋 CheckList App - Sistema de Gestão de Checklists`);

@@ -87,13 +87,13 @@ router.post('/register', async (req, res) => {
     // Gerar tokens
     const accessToken = jwt.sign(
       { id: userId, email, name, role: 'owner' },
-      process.env.JWT_SECRET || 'default_secret',
+      process.env.JWT_SECRET,
       { expiresIn: '15m' }
     );
 
     const refreshToken = jwt.sign(
       { id: userId },
-      process.env.JWT_REFRESH_SECRET || 'default_refresh_secret',
+      process.env.JWT_REFRESH_SECRET,
       { expiresIn: '7d' }
     );
 
@@ -151,13 +151,13 @@ router.post('/login', async (req, res) => {
         company_id: user.company_id,
         is_master: user.is_master === 1
       },
-      process.env.JWT_SECRET || 'default_secret',
+      process.env.JWT_SECRET,
       { expiresIn: '15m' }
     );
 
     const refreshToken = jwt.sign(
       { id: user.id },
-      process.env.JWT_REFRESH_SECRET || 'default_refresh_secret',
+      process.env.JWT_REFRESH_SECRET,
       { expiresIn: '7d' }
     );
 
@@ -251,24 +251,36 @@ router.post('/change-password', authenticateToken, async (req, res) => {
   }
 });
 
-// Marcar todos usuarios existentes para trocar senha (admin only)
+// Marcar usuários para trocar senha (owner = só sua empresa; master = toda a plataforma)
 router.post('/force-password-change-all', authenticateToken, async (req, res) => {
   try {
-    // Verificar se e admin/owner
-    if (req.user.role !== 'owner' && req.user.role_type !== 'owner') {
+    const isOwner = req.user.role_type === 'owner';
+    if (!isOwner && !req.user.is_master) {
       return res.status(403).json({ error: 'Acesso negado. Apenas administradores.' });
     }
 
-    // Marcar todos usuarios para trocar senha
-    await dbRunAsync(`UPDATE users SET must_change_password = 1`);
+    const PROTECTED_EMAIL = 'sandro@rhumarh.com';
 
-    // Log de auditoria
+    if (req.user.is_master) {
+      // Master pode forçar em toda a plataforma, exceto conta master protegida
+      await dbRunAsync(
+        `UPDATE users SET must_change_password = 1 WHERE email != ? AND is_master = 0`,
+        [PROTECTED_EMAIL]
+      );
+    } else {
+      // Owner só pode forçar na própria empresa
+      await dbRunAsync(
+        `UPDATE users SET must_change_password = 1 WHERE company_id = ?`,
+        [req.user.company_id]
+      );
+    }
+
     await dbRunAsync(`
       INSERT INTO audit_logs (id, user_id, action, entity_type, entity_id, details)
       VALUES (?, ?, 'FORCE_PASSWORD_CHANGE', 'system', 'all', ?)
-    `, [uuidv4(), req.user.id, JSON.stringify({ action: 'force_password_change_all_users' })]);
+    `, [uuidv4(), req.user.id, JSON.stringify({ action: 'force_password_change_all_users', scope: req.user.is_master ? 'platform' : 'company' })]);
 
-    res.json({ message: 'Todos os usuários foram marcados para trocar a senha no próximo login.' });
+    res.json({ message: 'Usuários marcados para trocar a senha no próximo login.' });
   } catch (error) {
     console.error('Erro ao forçar troca de senha:', error);
     res.status(500).json({ error: 'Erro ao processar solicitação' });
@@ -459,7 +471,7 @@ router.post('/refresh', async (req, res) => {
       return res.status(403).json({ error: 'Refresh token inválido ou expirado' });
     }
 
-    jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET || 'default_refresh_secret', async (err, decoded) => {
+    jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET, async (err, decoded) => {
       if (err) {
         return res.status(403).json({ error: 'Refresh token inválido' });
       }
@@ -484,7 +496,7 @@ router.post('/refresh', async (req, res) => {
           company_id: user.company_id,
           is_master: user.is_master === 1
         },
-        process.env.JWT_SECRET || 'default_secret',
+        process.env.JWT_SECRET,
         { expiresIn: '15m' }
       );
 

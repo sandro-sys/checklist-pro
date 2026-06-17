@@ -687,3 +687,89 @@ export function dbAll(sql, params = []) {
   stmt.free();
   return rows;
 }
+
+// Executa callback dentro de uma transação atômica (PostgreSQL e SQLite)
+export async function withTransaction(callback) {
+  if (isProduction) {
+    const client = await pgPool.connect();
+    try {
+      await client.query('BEGIN');
+      const txn = {
+        run: async (sql, params = []) => {
+          let paramIndex = 0;
+          const finalSql = sql.replace(/\?/g, () => `$${++paramIndex}`);
+          await client.query(finalSql, params);
+        },
+        get: async (sql, params = []) => {
+          let paramIndex = 0;
+          const finalSql = sql.replace(/\?/g, () => `$${++paramIndex}`);
+          const result = await client.query(finalSql, params);
+          return result.rows[0] || null;
+        }
+      };
+      await callback(txn);
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  } else {
+    db.run('BEGIN TRANSACTION');
+    try {
+      const txn = {
+        run: (sql, params = []) => { db.run(sql, params); },
+        get: (sql, params = []) => {
+          const stmt = db.prepare(sql);
+          stmt.bind(params);
+          if (stmt.step()) {
+            const row = stmt.getAsObject();
+            stmt.free();
+            return row;
+          }
+          stmt.free();
+          return null;
+        }
+      };
+      await callback(txn);
+      db.run('COMMIT');
+      saveDatabase();
+    } catch (error) {
+      db.run('ROLLBACK');
+      throw error;
+    }
+  }
+}
+
+// Migração única: força troca de senha para todos exceto o admin protegido
+export async function runOneTimeMigrations() {
+  const PROTECTED_EMAIL = 'sandro@rhumarh.com';
+  const MIGRATION_KEY = 'FORCE_PASSWORD_RESET_V1';
+
+  try {
+    const already = await dbGetAsync(
+      `SELECT id FROM audit_logs WHERE action = ? LIMIT 1`,
+      [MIGRATION_KEY]
+    );
+
+    if (!already) {
+      await dbRunAsync(
+        `UPDATE users SET must_change_password = 1 WHERE email != ?`,
+        [PROTECTED_EMAIL]
+      );
+      await dbRunAsync(
+        `INSERT INTO audit_logs (id, action, entity_type, details, created_at) VALUES (?, ?, 'migration', ?, ?)`,
+        [
+          'migration-force-pwd-reset-v1',
+          MIGRATION_KEY,
+          JSON.stringify({ description: 'Força troca de senha para todos exceto admin protegido', protected: PROTECTED_EMAIL }),
+          new Date().toISOString()
+        ]
+      );
+      console.log(`✅ Migração ${MIGRATION_KEY}: todos os usuários marcados para trocar senha (exceto ${PROTECTED_EMAIL}).`);
+    }
+  } catch (error) {
+    console.error('⚠️ Erro na migração de senha:', error.message);
+  }
+}

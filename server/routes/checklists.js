@@ -1,7 +1,7 @@
 import express from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import QRCode from 'qrcode';
-import { dbRunAsync, dbGetAsync, dbAllAsync } from '../database/init.js';
+import { dbRunAsync, dbGetAsync, dbAllAsync, withTransaction } from '../database/init.js';
 import { authenticateToken } from '../middleware/auth.js';
 
 const router = express.Router();
@@ -144,20 +144,25 @@ router.post('/suggest-periodicity', authenticateToken, (req, res) => {
 // Criar checklist
 router.post('/', authenticateToken, async (req, res) => {
   try {
-    const { 
-      title, 
-      description, 
-      category_id, 
-      company_id,
-      periodicity, 
-      schedule_time, 
+    const {
+      title,
+      description,
+      category_id,
+      periodicity,
+      schedule_time,
       schedule_days,
       items,
       template_id
     } = req.body;
 
-    if (!title || !company_id) {
-      return res.status(400).json({ error: 'Título e empresa são obrigatórios' });
+    // [S5] company_id sempre vem do token, nunca do body
+    const company_id = req.user.company_id;
+
+    if (!title) {
+      return res.status(400).json({ error: 'Título é obrigatório' });
+    }
+    if (!company_id) {
+      return res.status(400).json({ error: 'Usuário não vinculado a uma empresa' });
     }
 
     const checklistId = uuidv4();
@@ -177,7 +182,7 @@ router.post('/', authenticateToken, async (req, res) => {
       };
     }
 
-    // Gerar QR Code
+    // Gerar QR Code (fora da transação — não é operação de banco)
     const qrCodeUrl = `${process.env.FRONTEND_URL || 'https://checklist-pro.onrender.com'}/execute/${checklistId}`;
     const qrCode = await QRCode.toDataURL(qrCodeUrl, {
       width: 300,
@@ -185,44 +190,45 @@ router.post('/', authenticateToken, async (req, res) => {
       color: { dark: '#1a1a2e', light: '#ffffff' }
     });
 
-    // Inserir checklist
-    await dbRunAsync(`
-      INSERT INTO checklists (id, title, description, category_id, company_id, periodicity, schedule_time, schedule_days, qr_code, created_by)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [
-      checklistId, 
-      checklistData.title, 
-      checklistData.description || null, 
-      category_id || null,
-      company_id,
-      checklistData.periodicity || 'daily',
-      checklistData.schedule_time || null,
-      schedule_days ? JSON.stringify(schedule_days) : null,
-      qrCode,
-      req.user.id
-    ]);
+    // [B2] Inserir checklist e itens em transação atômica
+    await withTransaction(async (txn) => {
+      await txn.run(`
+        INSERT INTO checklists (id, title, description, category_id, company_id, periodicity, schedule_time, schedule_days, qr_code, created_by)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `, [
+        checklistId,
+        checklistData.title,
+        checklistData.description || null,
+        category_id || null,
+        company_id,
+        checklistData.periodicity || 'daily',
+        checklistData.schedule_time || null,
+        schedule_days ? JSON.stringify(schedule_days) : null,
+        qrCode,
+        req.user.id
+      ]);
 
-    // Inserir itens
-    if (checklistItems && checklistItems.length > 0) {
-      for (let index = 0; index < checklistItems.length; index++) {
-        const item = checklistItems[index];
-        await dbRunAsync(`
-          INSERT INTO checklist_items (id, checklist_id, title, description, order_index, is_required, item_type, options)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        `, [
-          uuidv4(),
-          checklistId,
-          item.title,
-          item.description || null,
-          index,
-          item.is_required ? 1 : 0,
-          item.item_type || 'checkbox',
-          item.options ? JSON.stringify(item.options) : null
-        ]);
+      if (checklistItems && checklistItems.length > 0) {
+        for (let index = 0; index < checklistItems.length; index++) {
+          const item = checklistItems[index];
+          await txn.run(`
+            INSERT INTO checklist_items (id, checklist_id, title, description, order_index, is_required, item_type, options)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          `, [
+            uuidv4(),
+            checklistId,
+            item.title,
+            item.description || null,
+            index,
+            item.is_required ? 1 : 0,
+            item.item_type || 'checkbox',
+            item.options ? JSON.stringify(item.options) : null
+          ]);
+        }
       }
-    }
+    });
 
-    // Log de auditoria
+    // Log de auditoria (fora da transação — falha não deve reverter o checklist)
     await dbRunAsync(`
       INSERT INTO audit_logs (id, user_id, action, entity_type, entity_id, details)
       VALUES (?, ?, 'CREATE', 'checklist', ?, ?)
@@ -290,7 +296,7 @@ router.get('/:id', authenticateToken, async (req, res) => {
     const { id } = req.params;
 
     const checklist = await dbGetAsync(`
-      SELECT c.*, 
+      SELECT c.*,
              cat.name as category_name,
              cat.icon as category_icon,
              u.name as created_by_name
@@ -304,9 +310,14 @@ router.get('/:id', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'Checklist não encontrado' });
     }
 
+    // [S6] Verificar propriedade — apenas da própria empresa ou master
+    if (checklist.company_id !== req.user.company_id && !req.user.is_master) {
+      return res.status(403).json({ error: 'Acesso negado' });
+    }
+
     const items = await dbAllAsync(`
-      SELECT * FROM checklist_items 
-      WHERE checklist_id = ? 
+      SELECT * FROM checklist_items
+      WHERE checklist_id = ?
       ORDER BY order_index
     `, [id]);
 
@@ -362,10 +373,15 @@ router.put('/:id', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'Checklist não encontrado' });
     }
 
-    // Atualizar checklist
+    // [S6] Verificar propriedade
+    if (checklist.company_id !== req.user.company_id && !req.user.is_master) {
+      return res.status(403).json({ error: 'Acesso negado' });
+    }
+
+    // Atualizar metadados do checklist
     await dbRunAsync(`
-      UPDATE checklists 
-      SET title = ?, description = ?, category_id = ?, periodicity = ?, 
+      UPDATE checklists
+      SET title = ?, description = ?, category_id = ?, periodicity = ?,
           schedule_time = ?, schedule_days = ?, is_active = ?, updated_at = ?
       WHERE id = ?
     `, [
@@ -380,31 +396,30 @@ router.put('/:id', authenticateToken, async (req, res) => {
       id
     ]);
 
-    // Atualizar itens se fornecidos
+    // [B1] DELETE + INSERT de itens em transação atômica — evita checklist sem itens
     if (items && Array.isArray(items)) {
-      // Remover itens antigos
-      await dbRunAsync('DELETE FROM checklist_items WHERE checklist_id = ?', [id]);
+      await withTransaction(async (txn) => {
+        await txn.run('DELETE FROM checklist_items WHERE checklist_id = ?', [id]);
 
-      // Inserir novos itens
-      for (let index = 0; index < items.length; index++) {
-        const item = items[index];
-        await dbRunAsync(`
-          INSERT INTO checklist_items (id, checklist_id, title, description, order_index, is_required, item_type, options)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        `, [
-          item.id || uuidv4(),
-          id,
-          item.title,
-          item.description || null,
-          index,
-          item.is_required ? 1 : 0,
-          item.item_type || 'checkbox',
-          item.options ? JSON.stringify(item.options) : null
-        ]);
-      }
+        for (let index = 0; index < items.length; index++) {
+          const item = items[index];
+          await txn.run(`
+            INSERT INTO checklist_items (id, checklist_id, title, description, order_index, is_required, item_type, options)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          `, [
+            item.id || uuidv4(),
+            id,
+            item.title,
+            item.description || null,
+            index,
+            item.is_required ? 1 : 0,
+            item.item_type || 'checkbox',
+            item.options ? JSON.stringify(item.options) : null
+          ]);
+        }
+      });
     }
 
-    // Log de auditoria
     await dbRunAsync(`
       INSERT INTO audit_logs (id, user_id, action, entity_type, entity_id, details)
       VALUES (?, ?, 'UPDATE', 'checklist', ?, ?)
@@ -425,6 +440,11 @@ router.delete('/:id', authenticateToken, async (req, res) => {
     const checklist = await dbGetAsync('SELECT * FROM checklists WHERE id = ?', [id]);
     if (!checklist) {
       return res.status(404).json({ error: 'Checklist não encontrado' });
+    }
+
+    // [S6] Verificar propriedade
+    if (checklist.company_id !== req.user.company_id && !req.user.is_master) {
+      return res.status(403).json({ error: 'Acesso negado' });
     }
 
     // Soft delete - apenas desativa
