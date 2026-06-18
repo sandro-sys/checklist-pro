@@ -341,6 +341,7 @@ async function initPostgres() {
       finalized_by TEXT
     )
   `);
+  try { await pgPool.query(`ALTER TABLE stock_lists ADD COLUMN assigned_to TEXT`); } catch (_) {}
 
   await pgPool.query(`
     CREATE TABLE IF NOT EXISTS stock_list_items (
@@ -717,6 +718,9 @@ async function initSQLite() {
   } catch (e) {}
   try {
     db.run(`ALTER TABLE users ADD COLUMN must_change_password INTEGER DEFAULT 0`);
+  } catch (e) {}
+  try {
+    db.run(`ALTER TABLE stock_lists ADD COLUMN assigned_to TEXT`);
   } catch (e) {}
 
   saveDatabase();

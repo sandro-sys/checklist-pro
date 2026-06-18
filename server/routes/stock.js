@@ -101,10 +101,11 @@ router.get('/lists', async (req, res) => {
   if (!guardCompany(req, res)) return;
   try {
     const lists = await dbAllAsync(
-      `SELECT sl.*, u.name as created_by_name,
+      `SELECT sl.*, u.name as created_by_name, u2.name as assigned_to_name,
          (SELECT COUNT(*) FROM stock_list_items WHERE list_id = sl.id) as items_count
        FROM stock_lists sl
-       LEFT JOIN users u ON sl.created_by = u.id
+       LEFT JOIN users u  ON sl.created_by  = u.id
+       LEFT JOIN users u2 ON sl.assigned_to = u2.id
        WHERE sl.company_id = ?
        ORDER BY sl.created_at DESC`,
       [req.user.company_id]
@@ -119,15 +120,15 @@ router.get('/lists', async (req, res) => {
 router.post('/lists', async (req, res) => {
   if (!guardCompany(req, res)) return;
   try {
-    const { name, type, notes } = req.body;
+    const { name, type, notes, assigned_to } = req.body;
     if (!name || !type) return res.status(400).json({ error: 'Nome e tipo são obrigatórios' });
     if (!['contagem', 'compras', 'inventario'].includes(type))
       return res.status(400).json({ error: 'Tipo inválido. Use: contagem, compras ou inventario' });
 
     const id = uuidv4();
     await dbRunAsync(
-      `INSERT INTO stock_lists (id, company_id, name, type, status, notes, created_by) VALUES (?, ?, ?, ?, 'editing', ?, ?)`,
-      [id, req.user.company_id, name.toUpperCase().trim(), type, notes || null, req.user.id]
+      `INSERT INTO stock_lists (id, company_id, name, type, status, notes, created_by, assigned_to) VALUES (?, ?, ?, ?, 'editing', ?, ?, ?)`,
+      [id, req.user.company_id, name.toUpperCase().trim(), type, notes || null, req.user.id, assigned_to || null]
     );
     res.status(201).json({ message: 'Lista criada', list: await dbGetAsync(`SELECT * FROM stock_lists WHERE id = ?`, [id]) });
   } catch (e) {
@@ -140,7 +141,14 @@ router.get('/lists/:id', async (req, res) => {
   if (!guardCompany(req, res)) return;
   try {
     const { id } = req.params;
-    const list = await dbGetAsync(`SELECT sl.*, u.name as created_by_name FROM stock_lists sl LEFT JOIN users u ON sl.created_by = u.id WHERE sl.id = ? AND sl.company_id = ?`, [id, req.user.company_id]);
+    const list = await dbGetAsync(
+      `SELECT sl.*, u.name as created_by_name, u2.name as assigned_to_name
+       FROM stock_lists sl
+       LEFT JOIN users u  ON sl.created_by  = u.id
+       LEFT JOIN users u2 ON sl.assigned_to = u2.id
+       WHERE sl.id = ? AND sl.company_id = ?`,
+      [id, req.user.company_id]
+    );
     if (!list) return res.status(404).json({ error: 'Lista não encontrada' });
 
     const items = await dbAllAsync(
@@ -162,14 +170,20 @@ router.put('/lists/:id', async (req, res) => {
   if (!guardCompany(req, res)) return;
   try {
     const { id } = req.params;
-    const { name, notes } = req.body;
+    const { name, notes, assigned_to } = req.body;
     const list = await dbGetAsync(`SELECT * FROM stock_lists WHERE id = ? AND company_id = ?`, [id, req.user.company_id]);
     if (!list) return res.status(404).json({ error: 'Lista não encontrada' });
     if (list.status === 'finalizada') return res.status(400).json({ error: 'Lista finalizada não pode ser editada' });
 
     await dbRunAsync(
-      `UPDATE stock_lists SET name = ?, notes = ?, updated_at = ? WHERE id = ?`,
-      [name ? name.toUpperCase().trim() : list.name, notes !== undefined ? notes : list.notes, new Date().toISOString(), id]
+      `UPDATE stock_lists SET name = ?, notes = ?, assigned_to = ?, updated_at = ? WHERE id = ?`,
+      [
+        name ? name.toUpperCase().trim() : list.name,
+        notes !== undefined ? notes : list.notes,
+        assigned_to !== undefined ? (assigned_to || null) : list.assigned_to,
+        new Date().toISOString(),
+        id
+      ]
     );
     res.json({ message: 'Lista atualizada' });
   } catch (e) {

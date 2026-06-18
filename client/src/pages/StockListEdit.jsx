@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Plus, Trash2, Download, CheckCircle, AlertTriangle, Search, Package, Edit2, Save, X, ClipboardCheck } from 'lucide-react'
+import { ArrowLeft, Plus, Trash2, Download, CheckCircle, AlertTriangle, Search, Package, Edit2, Save, X, ClipboardCheck, User } from 'lucide-react'
 import api from '../services/api'
 import toast from 'react-hot-toast'
 
@@ -202,19 +202,22 @@ export default function StockListEdit() {
   const [list, setList] = useState(null)
   const [items, setItems] = useState([])
   const [products, setProducts] = useState([])
+  const [users, setUsers] = useState([])
   const [loading, setLoading] = useState(true)
   const [finalizing, setFinalizing] = useState(false)
   const [exporting, setExporting] = useState(false)
 
   const load = async () => {
     try {
-      const [listRes, productsRes] = await Promise.all([
+      const [listRes, productsRes, usersRes] = await Promise.all([
         api.get(`/stock/lists/${id}`),
-        api.get('/stock/products')
+        api.get('/stock/products'),
+        api.get('/users')
       ])
       setList(listRes.data)
       setItems(listRes.data.items || [])
       setProducts(productsRes.data)
+      setUsers(usersRes.data.filter(u => u.is_active))
     } catch {
       toast.error('Erro ao carregar lista')
     } finally {
@@ -244,6 +247,20 @@ export default function StockListEdit() {
       toast.error(err.response?.data?.error || 'Erro ao finalizar lista')
     } finally {
       setFinalizing(false)
+    }
+  }
+
+  const handleAssign = async (assignedTo) => {
+    try {
+      await api.put(`/stock/lists/${id}`, { assigned_to: assignedTo || null })
+      setList(prev => ({
+        ...prev,
+        assigned_to: assignedTo || null,
+        assigned_to_name: users.find(u => u.id === assignedTo)?.name || null
+      }))
+      toast.success(assignedTo ? 'Lista atribuída' : 'Atribuição removida')
+    } catch {
+      toast.error('Erro ao salvar atribuição')
     }
   }
 
@@ -289,6 +306,28 @@ export default function StockListEdit() {
           </div>
           <h1 className="text-2xl font-bold text-white truncate">{list.name}</h1>
           {list.notes && <p className="text-dark-400 text-sm mt-0.5">{list.notes}</p>}
+          {/* Atribuição */}
+          {!finalized && users.length > 0 && (
+            <div className="flex items-center gap-2 mt-2">
+              <User className="w-3.5 h-3.5 text-dark-500 flex-shrink-0" />
+              <select
+                value={list.assigned_to || ''}
+                onChange={e => handleAssign(e.target.value)}
+                className="text-xs bg-dark-700 border border-dark-600 rounded-lg px-2 py-1 text-dark-300 focus:outline-none focus:border-primary-500 focus:text-white transition-colors"
+              >
+                <option value="">— Sem atribuição —</option>
+                {users.map(u => (
+                  <option key={u.id} value={u.id}>{u.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+          {finalized && list.assigned_to_name && (
+            <div className="flex items-center gap-1.5 mt-2">
+              <User className="w-3.5 h-3.5 text-dark-500" />
+              <span className="text-xs text-dark-400">{list.assigned_to_name}</span>
+            </div>
+          )}
         </div>
         <div className="flex gap-2 flex-shrink-0">
           <button onClick={handleExport} disabled={exporting}

@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, FileText, CheckCircle, Clock, Download, Eye, X, ClipboardList, ClipboardCheck } from 'lucide-react'
+import { Plus, FileText, CheckCircle, Clock, Download, Eye, X, ClipboardList, ClipboardCheck, User } from 'lucide-react'
 import api from '../services/api'
+import { useAuthStore } from '../store/authStore'
 import toast from 'react-hot-toast'
 
 const TYPE_LABELS = { contagem: 'Contagem', compras: 'Compras', inventario: 'Inventário' }
@@ -11,8 +12,8 @@ const TYPE_COLORS = {
   inventario: 'bg-purple-500/20 text-purple-400 border-purple-500/30'
 }
 
-function NewListModal({ onClose, onCreate }) {
-  const [form, setForm] = useState({ name: '', type: 'contagem', notes: '' })
+function NewListModal({ onClose, onCreate, users }) {
+  const [form, setForm] = useState({ name: '', type: 'contagem', notes: '', assigned_to: '' })
   const [saving, setSaving] = useState(false)
 
   const defaultName = () => {
@@ -26,7 +27,11 @@ function NewListModal({ onClose, onCreate }) {
     setSaving(true)
     try {
       const name = form.name.trim() || defaultName()
-      const { data } = await api.post('/stock/lists', { ...form, name })
+      const { data } = await api.post('/stock/lists', {
+        ...form,
+        name,
+        assigned_to: form.assigned_to || undefined
+      })
       toast.success('Lista criada')
       onCreate(data.list)
     } catch (err) {
@@ -35,6 +40,8 @@ function NewListModal({ onClose, onCreate }) {
       setSaving(false)
     }
   }
+
+  const activeUsers = users.filter(u => u.is_active)
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -66,6 +73,19 @@ function NewListModal({ onClose, onCreate }) {
             />
           </div>
           <div>
+            <label className="block text-sm font-medium text-dark-300 mb-1">Atribuir a <span className="text-dark-500 text-xs">(opcional)</span></label>
+            <select
+              className="w-full bg-dark-700 border border-dark-600 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary-500"
+              value={form.assigned_to}
+              onChange={e => setForm({ ...form, assigned_to: e.target.value })}
+            >
+              <option value="">— Sem atribuição —</option>
+              {activeUsers.map(u => (
+                <option key={u.id} value={u.id}>{u.name}</option>
+              ))}
+            </select>
+          </div>
+          <div>
             <label className="block text-sm font-medium text-dark-300 mb-1">Observação <span className="text-dark-500 text-xs">(opcional)</span></label>
             <input
               className="w-full bg-dark-700 border border-dark-600 rounded-xl px-4 py-3 text-white placeholder-dark-400 focus:outline-none focus:border-primary-500"
@@ -88,15 +108,21 @@ function NewListModal({ onClose, onCreate }) {
 
 export default function StockLists() {
   const [lists, setLists] = useState([])
+  const [users, setUsers] = useState([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const navigate = useNavigate()
+  const { user } = useAuthStore()
 
   const load = async () => {
     setLoading(true)
     try {
-      const { data } = await api.get('/stock/lists')
-      setLists(data)
+      const [listsRes, usersRes] = await Promise.all([
+        api.get('/stock/lists'),
+        api.get('/users')
+      ])
+      setLists(listsRes.data)
+      setUsers(usersRes.data)
     } catch {
       toast.error('Erro ao carregar listas')
     } finally {
@@ -120,11 +146,16 @@ export default function StockLists() {
     }
   }
 
-  const editingLists = lists.filter(l => l.status === 'editing')
+  const myPendingLists = lists.filter(l => l.assigned_to === user?.id && l.status === 'editing')
+  const editingLists   = lists.filter(l => l.status === 'editing')
   const finalizedLists = lists.filter(l => l.status === 'finalizada')
 
-  const ListCard = ({ list }) => (
-    <div className="bg-dark-800/50 border border-dark-700/50 rounded-2xl p-5 hover:border-dark-600 transition-all">
+  const ListCard = ({ list, highlight }) => (
+    <div className={`border rounded-2xl p-5 transition-all ${
+      highlight
+        ? 'bg-primary-500/10 border-primary-500/30 hover:border-primary-500/50'
+        : 'bg-dark-800/50 border-dark-700/50 hover:border-dark-600'
+    }`}>
       <div className="flex items-start justify-between gap-3 mb-3">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
@@ -159,7 +190,16 @@ export default function StockLists() {
           </button>
         </div>
       </div>
-      <div className="flex items-center gap-4 text-xs text-dark-500 mt-3 pt-3 border-t border-dark-700/50">
+
+      {/* Atribuição */}
+      {list.assigned_to_name && (
+        <div className="flex items-center gap-1.5 mb-3">
+          <User className="w-3 h-3 text-dark-500 flex-shrink-0" />
+          <span className="text-xs text-dark-400 truncate">{list.assigned_to_name}</span>
+        </div>
+      )}
+
+      <div className="flex items-center gap-4 text-xs text-dark-500 pt-3 border-t border-dark-700/50">
         <span>{list.items_count} {list.items_count === 1 ? 'item' : 'itens'}</span>
         <span>•</span>
         <span>{list.created_by_name}</span>
@@ -190,7 +230,33 @@ export default function StockLists() {
           <button onClick={() => setShowModal(true)} className="text-primary-400 hover:text-primary-300 text-sm">+ Criar primeira lista</button>
         </div>
       ) : (
-        <div className="space-y-6">
+        <div className="space-y-8">
+
+          {/* Minhas Contagens — visível só para quem tem listas atribuídas */}
+          {myPendingLists.length > 0 && (
+            <div>
+              <div className="flex items-center gap-2 mb-3">
+                <ClipboardCheck className="w-4 h-4 text-primary-400" />
+                <h2 className="text-sm font-semibold text-primary-400 uppercase tracking-wider">
+                  Minhas Contagens ({myPendingLists.length})
+                </h2>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                {myPendingLists.map(l => (
+                  <div key={l.id} className="flex flex-col gap-3">
+                    <ListCard list={l} highlight />
+                    <button
+                      onClick={() => navigate(`/estoque/listas/${l.id}/executar`)}
+                      className="w-full py-3 bg-gradient-to-r from-primary-500 to-accent-teal text-white font-semibold rounded-xl hover:shadow-lg hover:shadow-primary-500/25 transition-all flex items-center justify-center gap-2 text-sm"
+                    >
+                      <ClipboardCheck className="w-4 h-4" /> Iniciar Contagem
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {editingLists.length > 0 && (
             <div>
               <h2 className="text-sm font-semibold text-dark-400 uppercase tracking-wider mb-3">Em Edição ({editingLists.length})</h2>
@@ -212,6 +278,7 @@ export default function StockLists() {
 
       {showModal && (
         <NewListModal
+          users={users}
           onClose={() => setShowModal(false)}
           onCreate={(list) => { setShowModal(false); navigate(`/estoque/listas/${list.id}`) }}
         />
