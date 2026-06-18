@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Plus, Trash2, Download, CheckCircle, AlertTriangle, Search, Package, Edit2, Save, X } from 'lucide-react'
+import { ArrowLeft, Plus, Trash2, Download, CheckCircle, AlertTriangle, Search, Package, Edit2, Save, X, ClipboardCheck } from 'lucide-react'
 import api from '../services/api'
 import toast from 'react-hot-toast'
 
@@ -295,9 +295,15 @@ export default function StockListEdit() {
             className="flex items-center gap-2 px-3 py-2 bg-dark-800 border border-dark-700 text-dark-300 hover:text-white hover:border-dark-600 rounded-xl text-sm transition-colors">
             <Download className="w-4 h-4" /> {exporting ? 'Exportando...' : 'Exportar TXT'}
           </button>
+          {!finalized && items.length > 0 && (
+            <button onClick={() => navigate(`/estoque/listas/${id}/executar`)}
+              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-primary-500 to-accent-teal text-white font-semibold rounded-xl hover:shadow-lg hover:shadow-primary-500/25 transition-all text-sm">
+              <ClipboardCheck className="w-4 h-4" /> Iniciar Contagem
+            </button>
+          )}
           {!finalized && (
             <button onClick={handleFinalize} disabled={finalizing || items.length === 0}
-              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-semibold rounded-xl hover:shadow-lg hover:shadow-emerald-500/25 transition-all disabled:opacity-50 text-sm">
+              className="flex items-center gap-2 px-4 py-2 bg-dark-800 border border-dark-700 text-dark-300 hover:text-white hover:border-dark-600 rounded-xl hover:shadow-lg transition-all disabled:opacity-50 text-sm">
               <CheckCircle className="w-4 h-4" /> {finalizing ? 'Finalizando...' : 'Finalizar Lista'}
             </button>
           )}

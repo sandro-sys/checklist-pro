@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, FileText, CheckCircle, Clock, Download, Eye, X, ClipboardList } from 'lucide-react'
+import { Plus, FileText, CheckCircle, Clock, Download, Eye, X, ClipboardList, ClipboardCheck } from 'lucide-react'
 import api from '../services/api'
 import toast from 'react-hot-toast'
 
@@ -149,7 +149,12 @@ export default function StockLists() {
           <button onClick={() => handleExport(list)} className="p-2 text-dark-400 hover:text-primary-400 hover:bg-primary-500/10 rounded-lg transition-colors" title="Exportar TXT">
             <Download className="w-4 h-4" />
           </button>
-          <button onClick={() => navigate(`/estoque/listas/${list.id}`)} className="p-2 text-dark-400 hover:text-white hover:bg-dark-700 rounded-lg transition-colors" title={list.status === 'editing' ? 'Editar lista' : 'Ver lista'}>
+          {list.status === 'editing' && (
+            <button onClick={() => navigate(`/estoque/listas/${list.id}/executar`)} className="p-2 text-dark-400 hover:text-emerald-400 hover:bg-emerald-500/10 rounded-lg transition-colors" title="Iniciar contagem">
+              <ClipboardCheck className="w-4 h-4" />
+            </button>
+          )}
+          <button onClick={() => navigate(`/estoque/listas/${list.id}`)} className="p-2 text-dark-400 hover:text-white hover:bg-dark-700 rounded-lg transition-colors" title={list.status === 'editing' ? 'Configurar lista' : 'Ver lista'}>
             {list.status === 'editing' ? <FileText className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
           </button>
         </div>

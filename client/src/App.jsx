@@ -34,6 +34,7 @@ import Support from './pages/Support'
 import StockProducts from './pages/StockProducts'
 import StockLists from './pages/StockLists'
 import StockListEdit from './pages/StockListEdit'
+import StockListExecute from './pages/StockListExecute'
 import StockHistory from './pages/StockHistory'
 
 // Protected Route Component
@@ -146,6 +147,7 @@ function App() {
         <Route path="/estoque/produtos" element={<RequirePlan><StockProducts /></RequirePlan>} />
         <Route path="/estoque/listas" element={<RequirePlan><StockLists /></RequirePlan>} />
         <Route path="/estoque/listas/:id" element={<RequirePlan><StockListEdit /></RequirePlan>} />
+        <Route path="/estoque/listas/:id/executar" element={<RequirePlan><StockListExecute /></RequirePlan>} />
         <Route path="/estoque/historico" element={<RequirePlan><StockHistory /></RequirePlan>} />
       </Route>
       
