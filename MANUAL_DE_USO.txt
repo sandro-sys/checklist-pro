@@ -1,0 +1,836 @@
+================================================================================
+                        CHECKLIST PRO — MANUAL DE USO
+                          Versão 1.0 · Junho de 2026
+================================================================================
+
+
+SUMÁRIO
+-------
+  1. Apresentação
+  2. Acesso ao Sistema
+  3. Configuração Inicial
+  4. Módulo de Checklists
+       4.1  Visão geral
+       4.2  Criar um checklist
+       4.3  Tipos de item
+       4.4  Importar itens da Lista de Estoque
+       4.5  Compartilhar e executar um checklist
+       4.6  Como o colaborador executa
+       4.7  Comprovante de execução
+       4.8  Histórico de execuções
+  5. Módulo de Estoque
+       5.1  Visão geral
+       5.2  Cadastro de produtos
+       5.3  Importar lista padrão de restaurante
+       5.4  Alertas de estoque mínimo
+       5.5  Lançamento manual de movimento
+       5.6  Exclusão em massa de produtos
+       5.7  Listas de estoque
+       5.8  Criar e configurar uma lista
+       5.9  Atribuir lista a um colaborador
+       5.10 Execução da contagem pelo colaborador
+       5.11 Finalização e atualização de saldos
+       5.12 Histórico de movimentos
+       5.13 Exportação em TXT
+  6. Gestão de Equipe
+  7. Relatórios
+  8. Dicas e Boas Práticas
+  9. Perguntas Frequentes
+
+
+================================================================================
+1. APRESENTAÇÃO
+================================================================================
+
+O CheckList Pro é uma plataforma de controle operacional desenvolvida para
+restaurantes e estabelecimentos comerciais. O sistema centraliza duas funções
+essenciais da operação diária:
+
+  - CHECKLISTS OPERACIONAIS
+    Processos como abertura, fechamento, limpeza e vistoria são transformados
+    em formulários digitais que os colaboradores preenchem pelo celular ou
+    computador. O gestor acompanha tudo em tempo real.
+
+  - CONTROLE DE ESTOQUE
+    Contagem de produtos, listas de compras e inventários são gerenciados com
+    atribuição por colaborador, salvamento automático e atualização instantânea
+    dos saldos ao finalizar.
+
+O sistema funciona pelo navegador (Chrome, Safari, Firefox) em qualquer
+dispositivo — computador, tablet ou celular — sem necessidade de instalação.
+
+
+================================================================================
+2. ACESSO AO SISTEMA
+================================================================================
+
+2.1 FAZER LOGIN
+---------------
+Acesse o endereço fornecido pela sua empresa. Na tela inicial informe:
+
+  - E-mail cadastrado
+  - Senha
+
+Clique em "Entrar".
+
+2.2 PRIMEIRO ACESSO DO COLABORADOR
+-----------------------------------
+Quando o gestor cria um colaborador, uma senha temporária é gerada. No primeiro
+login o sistema solicita automaticamente a criação de uma nova senha pessoal.
+
+A nova senha deve ter no mínimo 8 caracteres.
+
+2.3 ESQUECI MINHA SENHA
+------------------------
+Na tela de login clique em "Esqueci minha senha". Informe o e-mail cadastrado.
+Um link de redefinição será enviado para esse e-mail. O link expira em 1 hora.
+
+2.4 TROCAR A SENHA
+------------------
+Após o login acesse o menu de perfil (canto superior) e escolha "Trocar Senha".
+Informe a senha atual e a nova senha duas vezes para confirmar.
+
+
+================================================================================
+3. CONFIGURAÇÃO INICIAL
+================================================================================
+
+Antes de usar o sistema pela primeira vez, o gestor deve configurar dois itens:
+dados da empresa e cadastro da equipe. Essa etapa é feita apenas uma vez.
+
+3.1 DADOS DA EMPRESA
+---------------------
+Menu lateral → Empresa
+
+Preencha:
+  - Nome do estabelecimento
+  - CNPJ (opcional)
+  - Telefone e endereço
+  - Logo (opcional)
+
+Essas informações aparecem nos relatórios e nos arquivos exportados.
+
+3.2 PLANO E ASSINATURA
+-----------------------
+Menu lateral → Planos
+
+O sistema oferece período de avaliação gratuita. Para continuar usando após
+o período de teste é necessário assinar um plano. As funcionalidades de
+checklist e estoque exigem plano ativo.
+
+3.3 CATEGORIAS
+--------------
+As categorias organizam os checklists por área de trabalho. Exemplos comuns:
+Cozinha, Salão, Limpeza, Segurança, Financeiro, Operação.
+
+Categorias são gerenciadas em: Menu → Empresa → Categorias.
+
+3.4 CADASTRO DA EQUIPE
+-----------------------
+Consulte a Seção 6 deste manual para instruções completas sobre como cadastrar
+e gerenciar colaboradores.
+
+
+================================================================================
+4. MÓDULO DE CHECKLISTS
+================================================================================
+
+4.1 VISÃO GERAL
+---------------
+Um checklist é uma lista de verificação que o colaborador preenche durante a
+execução de um processo operacional. Exemplos de uso:
+
+  - Abertura do restaurante
+  - Fechamento do caixa
+  - Vistoria da cozinha antes do serviço
+  - Limpeza dos equipamentos
+  - Higienização do banheiro
+
+Cada checklist tem itens que podem ser marcados, respondidos com texto ou
+com foto. Ao finalizar, o sistema gera um registro histórico com data, hora,
+responsável e índice de conformidade.
+
+Para acessar: Menu lateral → Checklists
+
+
+4.2 CRIAR UM CHECKLIST
+-----------------------
+Menu → Checklists → botão "Novo Checklist"
+
+PASSO 1 — TEMPLATES PRONTOS
+
+O sistema oferece modelos pré-configurados para as rotinas mais comuns. Ao
+entrar na tela de criação, os templates disponíveis aparecem automaticamente.
+Clique em um template para carregar os itens. Você pode editar, adicionar ou
+remover itens após carregar.
+
+Para criar um checklist do zero, clique em "Criar do zero".
+
+PASSO 2 — INFORMAÇÕES BÁSICAS
+
+  Título            Nome do checklist. Ex: "Abertura do Restaurante"
+  Descrição         Instruções gerais para o colaborador (opcional)
+  Categoria         Agrupa o checklist por área de trabalho
+  Periodicidade     Com que frequência deve ser executado:
+                      - Diário
+                      - Semanal
+                      - Mensal
+                      - Por Turno
+                      - Personalizado
+  Horário sugerido  Referência de horário para a execução
+
+Ao digitar o título, o sistema sugere automaticamente a periodicidade com
+base nas palavras usadas. Você pode aceitar ou alterar a sugestão.
+
+PASSO 3 — ITENS DO CHECKLIST
+
+Os itens são as tarefas individuais dentro do checklist. Veja a Seção 4.3
+para os tipos disponíveis.
+
+Para adicionar um item clique nos botões no canto superior da seção:
+  - "Checkbox" — item padrão
+  - "Foto" — exige imagem
+  - "Texto" — exige resposta escrita
+  - "Da Lista de Estoque" — importa produtos do módulo de estoque
+
+Para cada item você define:
+  - Título do item (obrigatório)
+  - Se o item é obrigatório ou opcional
+
+Itens obrigatórios bloqueiam a finalização do checklist caso não sejam
+respondidos.
+
+PASSO 4 — SALVAR
+
+Clique em "Criar Checklist". O checklist fica disponível para execução
+imediatamente após salvo.
+
+
+4.3 TIPOS DE ITEM
+-----------------
+
+CHECKBOX (padrão)
+  O colaborador marca o item como concluído com um toque. É o tipo mais
+  comum — usado para tarefas simples de verificação.
+  Exemplo: "Porta de entrada desbloqueada"
+
+FOTO
+  O sistema exige que o colaborador tire ou envie uma foto como evidência
+  da conclusão. Útil para registros visuais obrigatórios.
+  Limite: 2 itens com foto por checklist.
+  Formatos aceitos: JPEG, PNG, GIF, WebP (máx. 5 MB).
+  Exemplo: "Foto do termômetro do freezer"
+
+TEXTO (dissertativo)
+  O colaborador digita uma resposta em texto. Limite de 30 palavras.
+  Útil para observações ou informações variáveis.
+  Exemplo: "Temperatura registrada no freezer"
+
+Para qualquer tipo de item, o colaborador também pode marcar:
+  - N/A (não se aplica) — o item é ignorado na conformidade
+  - Não executado — registra que a tarefa não foi realizada
+
+
+4.4 IMPORTAR ITENS DA LISTA DE ESTOQUE
+---------------------------------------
+Na seção de itens do checklist, clique em "Da Lista de Estoque".
+
+Uma janela se abre com duas colunas:
+  - Coluna esquerda: todas as listas de estoque cadastradas
+  - Coluna direita: os produtos da lista selecionada
+
+Clique em uma lista para ver seus produtos. Marque os produtos que deseja
+incluir (ou clique em "Selecionar todos") e clique em "Importar".
+
+Os produtos importados viram itens do tipo Checkbox com o nome do produto
+como título. Você pode editar os títulos depois normalmente.
+
+Esse recurso é útil para criar checklists de verificação de estoque baseados
+em listas já existentes.
+
+
+4.5 COMPARTILHAR E EXECUTAR UM CHECKLIST
+-----------------------------------------
+Menu → Checklists
+
+Na lista de checklists, cada item tem um botão de compartilhamento. Ao
+clicar, o sistema exibe o link de execução do checklist.
+
+Formas de compartilhar:
+  - Copiar o link e colar no WhatsApp
+  - Enviar diretamente por e-mail pelo sistema
+  - O colaborador acessa Menu → Checklists e executa por ali
+
+O colaborador precisa estar logado no sistema para executar. Ao acessar
+o link sem estar logado, o sistema solicita o login antes de continuar.
+
+
+4.6 COMO O COLABORADOR EXECUTA
+--------------------------------
+Após acessar o checklist (pelo link ou pelo menu):
+
+1. O colaborador vê a tela inicial do checklist com o título, descrição e
+   o número de itens.
+
+2. Clica em "Iniciar Execução".
+
+3. Uma barra de progresso aparece no topo mostrando quantos itens foram
+   respondidos em relação ao total.
+
+4. Para cada item o colaborador pode:
+
+   CHECKBOX:
+     - Clicar no botão "Marcar como concluído" para registrar a conclusão
+     - Clicar novamente para desmarcar
+
+   FOTO:
+     - Clicar na área de upload para tirar foto com a câmera ou selecionar
+       da galeria
+     - A foto é enviada automaticamente após a seleção
+     - É possível remover e enviar outra foto
+
+   TEXTO:
+     - Digitar a resposta no campo de texto
+     - O sistema salva automaticamente ao sair do campo
+     - Contador de palavras aparece abaixo do campo (máx. 30 palavras)
+
+   Para qualquer item:
+     - "N/A" — marca como não aplicável
+     - "Não executado" — registra que a tarefa não foi feita
+
+5. Ao finalizar todos os itens, o colaborador clica em "Finalizar Checklist".
+
+   Se houver itens obrigatórios não respondidos, o sistema avisa quais são
+   e não permite finalizar.
+
+6. Tela de conclusão aparece confirmando o registro.
+
+
+4.7 COMPROVANTE DE EXECUÇÃO
+-----------------------------
+Após finalizar um checklist, o sistema gera um comprovante visual com:
+  - Nome do checklist e da empresa
+  - Nome do colaborador que executou
+  - Data e hora da execução
+  - Índice de conformidade (% de itens marcados como concluídos)
+
+O comprovante pode ser:
+
+  BAIXAR IMAGEM
+    Salva o comprovante como arquivo de imagem no dispositivo.
+
+  COPIAR IMAGEM
+    Copia a imagem para a área de transferência para colar diretamente
+    no WhatsApp (Ctrl+V ou pressionar e segurar → Colar).
+
+  ABRIR WHATSAPP
+    Abre o WhatsApp com o texto do comprovante. Em dispositivos móveis
+    com suporte, a imagem é compartilhada diretamente.
+
+  ENVIAR POR E-MAIL
+    Informe um endereço de e-mail e o comprovante é enviado automaticamente.
+
+  EXECUTAR NOVAMENTE
+    Permite iniciar uma nova execução do mesmo checklist imediatamente.
+
+
+4.8 HISTÓRICO DE EXECUÇÕES
+----------------------------
+Menu → Checklists → (clique no checklist) → Histórico
+
+Exibe todas as execuções registradas com:
+  - Data e hora de cada execução
+  - Nome do colaborador responsável
+  - Índice de conformidade da execução
+  - Detalhes de cada resposta (clique em uma execução para ver)
+
+Use o histórico para acompanhar a regularidade dos processos e identificar
+colaboradores ou turnos com índices abaixo do esperado.
+
+
+================================================================================
+5. MÓDULO DE ESTOQUE
+================================================================================
+
+5.1 VISÃO GERAL
+---------------
+O módulo de estoque controla o saldo de produtos e ingredientes do
+estabelecimento. Funciona com:
+
+  - Catálogo de produtos com saldo em tempo real
+  - Listas de contagem, compras e inventário
+  - Atribuição de listas para colaboradores específicos
+  - Histórico completo de todas as movimentações
+
+Para acessar: Menu lateral → Estoque
+
+
+5.2 CADASTRO DE PRODUTOS
+-------------------------
+Menu → Estoque → Produtos → botão "Novo Produto"
+
+Para cada produto informe:
+
+  Nome              Salvo automaticamente em CAIXA ALTA para padronização.
+  Categoria         Classifica o produto para facilitar filtros e buscas:
+                      Carnes e Proteínas · Laticínios · Grãos, Massas e Farinhas
+                      Óleos, Molhos e Temperos · Hortifrúti · Bebidas
+                      Descartáveis e Embalagens · Limpeza · Outros
+  Unidade           KG, G, L, ML, UN, CX, SC, PC, DZ ou MT
+  Estoque mínimo    Saldo abaixo do qual o sistema exibe alerta. Use 0 para
+                    não definir mínimo.
+
+O saldo inicial de todos os produtos começa em zero. Use uma lista de
+contagem ou lançamento manual para definir o saldo real.
+
+BUSCA E FILTROS
+
+Na tela de produtos há campos para filtrar por:
+  - Nome (busca em tempo real)
+  - Categoria
+  - Ver inativos (mostra produtos desativados)
+
+
+5.3 IMPORTAR LISTA PADRÃO DE RESTAURANTE
+-----------------------------------------
+Menu → Estoque → Produtos → botão "Importar Padrão"
+
+O sistema oferece 50 produtos pré-configurados organizados em 8 grupos:
+
+  - Carnes e Proteínas (8 produtos)
+  - Laticínios (6 produtos)
+  - Grãos, Massas e Farinhas (8 produtos)
+  - Óleos, Molhos e Temperos (8 produtos)
+  - Hortifrúti (8 produtos)
+  - Bebidas (4 produtos)
+  - Descartáveis e Embalagens (5 produtos)
+  - Limpeza (4 produtos)
+
+Na janela de importação:
+  - Todos os produtos aparecem pré-selecionados
+  - Clique no nome do grupo para selecionar/desmarcar o grupo inteiro
+  - Clique em cada produto para selecionar/desmarcar individualmente
+  - Produtos já cadastrados aparecem marcados como "existente" e são ignorados
+
+Clique em "Importar" para cadastrar os produtos selecionados. Uma barra de
+progresso mostra o andamento. O processo não pode ser interrompido.
+
+
+5.4 ALERTAS DE ESTOQUE MÍNIMO
+------------------------------
+Quando o saldo de um produto cai abaixo do estoque mínimo configurado, o
+sistema exibe alertas em dois locais:
+
+  1. Painel de alertas no topo da tela de Produtos (lista todos os produtos
+     abaixo do mínimo com saldo atual e saldo mínimo)
+  2. Ícone de alerta na linha do produto na tabela
+  3. Arquivo TXT exportado inclui seção de alertas no rodapé
+
+Configure o estoque mínimo de acordo com o consumo médio e o prazo de
+reposição de cada produto.
+
+
+5.5 LANÇAMENTO MANUAL DE MOVIMENTO
+------------------------------------
+Menu → Estoque → Produtos → ícone (✓) na linha do produto
+
+Use para registrar movimentações avulsas sem criar uma lista:
+
+  ENTRADA    Adiciona ao saldo. Use para compras, doações ou correções.
+  SAÍDA      Subtrai do saldo. Use para consumo, perdas ou quebras.
+  AJUSTE     Substitui o saldo pelo valor informado. Use para correções.
+
+Informe a quantidade e um motivo (opcional). O movimento é registrado
+imediatamente no histórico.
+
+
+5.6 EXCLUSÃO EM MASSA DE PRODUTOS
+-----------------------------------
+Para desativar vários produtos de uma vez:
+
+1. Na tabela de produtos, marque as caixas de seleção nas linhas desejadas.
+   Use a caixa no cabeçalho da tabela para selecionar todos os produtos
+   visíveis (respeitando filtros ativos).
+
+2. Uma barra vermelha aparece no topo mostrando quantos produtos estão
+   selecionados.
+
+3. Clique em "Desativar selecionados" e confirme.
+
+Os produtos são desativados (não excluídos permanentemente). O histórico
+de movimentos deles é mantido. Para reativá-los, use o filtro "Ver inativos"
+e edite o produto.
+
+
+5.7 LISTAS DE ESTOQUE
+----------------------
+As listas são a forma de realizar contagens, registrar compras e fazer
+inventários de forma organizada e rastreável.
+
+Menu → Estoque → Listas
+
+Existem três tipos de lista:
+
+  CONTAGEM
+    Registra a quantidade atual de cada produto no local.
+    Ao finalizar: o saldo do produto é substituído pelo valor contado.
+    Ideal para: conferência periódica do estoque (semanal, mensal).
+
+  COMPRAS
+    Registra o que foi comprado.
+    Ao finalizar: a quantidade comprada é somada ao saldo atual.
+    Ideal para: entrada de mercadoria após compra com fornecedor.
+
+  INVENTÁRIO
+    Funciona como a Contagem — substitui o saldo pelo valor informado.
+    Ideal para: inventário completo com documentação formal.
+
+
+5.8 CRIAR E CONFIGURAR UMA LISTA
+----------------------------------
+Menu → Estoque → Listas → botão "Nova Lista"
+
+PASSO 1 — CRIAR A LISTA
+
+  Tipo    Contagem, Compras ou Inventário
+  Nome    Se deixado em branco, o sistema gera automaticamente com o tipo
+          e a data. Ex: "CONTAGEM 18/06/2026"
+  Atribuir a    Selecione o colaborador que vai realizar a contagem
+  Observação    Instrução ou referência adicional (opcional)
+
+Clique em "Criar e Editar" para abrir a tela de configuração.
+
+PASSO 2 — MONTAR OS ITENS
+
+Na tela de configuração da lista você adiciona os produtos que serão
+contados ou comprados.
+
+Campo de busca:
+  - Digite o nome do produto para buscar no catálogo cadastrado
+  - O autocomplete exibe o saldo atual de cada produto na sugestão
+  - Selecione o produto sugerido para vinculá-lo ao catálogo
+
+Para cada item defina:
+  - Unidade (preenchida automaticamente se o produto for do catálogo)
+  - Quantidade (pode deixar em branco para preencher depois)
+  - Observação (opcional)
+
+A lista pode ter itens não vinculados ao catálogo — basta digitar o nome
+sem selecionar uma sugestão. Esses itens não atualizam o saldo ao finalizar.
+
+PASSO 3 — AJUSTES OPCIONAIS
+
+  Alterar atribuição    O campo de atribuição aparece abaixo do nome da lista.
+                        Selecione outro colaborador a qualquer momento.
+
+  Iniciar Contagem      Botão que leva o gestor à tela de execução para testar
+                        ou realizar a contagem ele mesmo.
+
+  Exportar TXT          Gera o arquivo mesmo antes de finalizar.
+
+  Finalizar Lista       Atualiza os saldos e trava a lista. Veja Seção 5.11.
+
+
+5.9 ATRIBUIR LISTA A UM COLABORADOR
+-------------------------------------
+A atribuição pode ser feita em dois momentos:
+
+AO CRIAR A LISTA
+  No campo "Atribuir a" do modal de nova lista, selecione o colaborador
+  pelo nome. O dropdown mostra todos os colaboradores ativos da empresa.
+
+APÓS CRIAR A LISTA
+  Na tela de configuração da lista, abaixo do título, há um campo de
+  seleção com os colaboradores disponíveis. A alteração é salva
+  automaticamente ao selecionar.
+
+Listas sem atribuição ficam visíveis para todos, mas não aparecem na seção
+"Minhas Contagens" de nenhum colaborador específico.
+
+
+5.10 EXECUÇÃO DA CONTAGEM PELO COLABORADOR
+-------------------------------------------
+Após o colaborador fazer login:
+
+1. Acessar Menu → Estoque → Listas
+
+2. A seção "MINHAS CONTAGENS" aparece em destaque no topo da página,
+   mostrando apenas as listas atribuídas ao colaborador logado que ainda
+   não foram finalizadas.
+
+3. Clicar em "Iniciar Contagem" no card da lista desejada.
+
+4. A tela de execução exibe:
+
+   - Nome e tipo da lista no topo
+   - Barra de progresso: "X / Y itens preenchidos"
+   - Um card por produto com:
+       * Nome do produto
+       * Saldo atual (se o produto estiver vinculado ao catálogo)
+       * Campo de quantidade em destaque (número grande, fácil de tocar)
+       * Unidade de medida
+       * Observação da lista (se houver)
+
+5. O colaborador digita a quantidade de cada produto.
+   O valor é salvo automaticamente ao passar para o próximo campo.
+   Não é necessário clicar em "Salvar".
+
+6. O ícone de cada item muda para verde quando a quantidade é preenchida.
+   A barra de progresso avança em tempo real.
+
+7. O botão de finalização fica no rodapé da página.
+
+
+5.11 FINALIZAÇÃO E ATUALIZAÇÃO DE SALDOS
+-----------------------------------------
+Ao clicar em "Finalizar e Atualizar Estoque":
+
+  1. O sistema solicita confirmação antes de prosseguir.
+
+  2. Para cada item com quantidade preenchida e vinculado ao catálogo:
+       - CONTAGEM / INVENTÁRIO: o saldo do produto é substituído pelo
+         valor informado
+       - COMPRAS: a quantidade informada é somada ao saldo atual
+
+  3. Cada alteração gera um registro no histórico de movimentos com:
+       - Tipo de movimento (ajuste ou entrada)
+       - Saldo anterior e novo saldo
+       - Nome da lista de origem
+       - Usuário e data/hora
+
+  4. Itens sem quantidade preenchida são ignorados.
+
+  5. Itens não vinculados ao catálogo são ignorados.
+
+  6. A lista é marcada como "Finalizada" e não pode mais ser editada.
+
+Após finalizar, o colaborador é redirecionado para a tela de detalhes da
+lista onde pode exportar o TXT se necessário.
+
+
+5.12 HISTÓRICO DE MOVIMENTOS
+------------------------------
+Menu → Estoque → Histórico
+
+Exibe todas as movimentações de estoque com filtros por:
+  - Produto específico
+  - Tipo (entrada / saída / ajuste)
+  - Limite de registros exibidos
+
+Cada registro mostra:
+  - Produto
+  - Tipo de movimento
+  - Quantidade movimentada
+  - Saldo anterior
+  - Novo saldo
+  - Origem (lista ou lançamento manual)
+  - Usuário responsável
+  - Data e hora
+
+
+5.13 EXPORTAÇÃO EM TXT
+-----------------------
+Disponível em qualquer lista (antes ou depois de finalizar).
+Botão "Exportar TXT" na tela de configuração ou na listagem de listas.
+
+O arquivo gerado contém:
+
+  CABEÇALHO
+    - Nome da empresa
+    - Tipo da lista (Contagem / Compras / Inventário)
+    - Status (Em edição / Finalizada)
+    - Data de criação e finalização
+    - Responsável pela lista
+    - Observação da lista
+
+  TABELA DE ITENS (colunas fixas de largura)
+    PRODUTO (26 chars) | QTDE (8 chars) | UNID (6 chars) | OBSERVAÇÃO
+
+  RODAPÉ
+    - Total de itens na lista
+    - SEÇÃO DE ALERTAS: lista os produtos abaixo do estoque mínimo com
+      saldo atual e saldo mínimo configurado (aparece somente se houver)
+
+Nome do arquivo gerado: estoque-[nome-da-lista]-[data].txt
+
+
+================================================================================
+6. GESTÃO DE EQUIPE
+================================================================================
+
+Menu → Equipe
+
+6.1 ADICIONAR COLABORADOR
+--------------------------
+Clique em "Novo Colaborador" e preencha:
+  - Nome completo
+  - E-mail (será usado para login)
+  - Telefone (opcional)
+  - Cargo/Função (opcional — para organização interna)
+  - Senha temporária
+
+O sistema gera uma senha temporária automaticamente. Você pode informar
+uma senha personalizada se preferir. Na primeira vez que o colaborador
+fizer login, o sistema pedirá para criar uma nova senha.
+
+6.2 EDITAR COLABORADOR
+-----------------------
+Clique no colaborador na lista para editar nome, telefone e cargo.
+
+6.3 ATIVAR E DESATIVAR COLABORADOR
+------------------------------------
+Use o controle de ativo/inativo na linha do colaborador.
+
+  ATIVO     O colaborador pode fazer login e acessar o sistema normalmente.
+  INATIVO   O acesso é bloqueado. O colaborador não consegue fazer login.
+
+Ao desativar um colaborador, todo o histórico de atividades dele é mantido.
+Os registros de execuções, contagens e movimentos permanecem intactos.
+
+6.4 TROCAR SENHA DE COLABORADOR
+---------------------------------
+Acesse o perfil do colaborador e use a opção de redefinição de senha.
+A nova senha pode ser informada pelo gestor ou gerada automaticamente.
+
+6.5 FORÇAR TROCA DE SENHA EM MASSA
+------------------------------------
+Menu → Equipe → opção de segurança
+
+O gestor pode forçar que todos os colaboradores troquem a senha no próximo
+login. Útil em situações de segurança ou após troca de gestão.
+
+
+================================================================================
+7. RELATÓRIOS
+================================================================================
+
+Menu → Relatórios
+
+Os relatórios exibem o desempenho operacional da equipe com base nas
+execuções de checklists registradas no sistema.
+
+TAXA DE CONFORMIDADE
+  Percentual de itens marcados como concluídos (não inclui N/A).
+  Exibido por checklist, por colaborador e por período.
+
+EXECUÇÕES REALIZADAS
+  Número total de execuções agrupadas por checklist e por colaborador.
+  Identifica quem está realizando as tarefas com regularidade.
+
+ITENS MAIS REPROVADOS
+  Lista os itens que mais frequentemente não são marcados como concluídos.
+  Permite identificar pontos críticos da operação que precisam de atenção.
+
+FILTROS DISPONÍVEIS
+  - Período (intervalo de datas)
+  - Checklist específico
+  - Colaborador específico
+
+Use os relatórios semanalmente para identificar padrões e conversar com
+a equipe sobre os processos que precisam de melhoria.
+
+
+================================================================================
+8. DICAS E BOAS PRÁTICAS
+================================================================================
+
+CHECKLISTS
+
+  - Mantenha os títulos dos itens claros e objetivos.
+    Ruim:   "Freezer"
+    Bom:    "Temperatura do freezer conferida e dentro do padrão"
+
+  - Marque como obrigatório apenas os itens realmente críticos. Itens
+    obrigatórios bloqueiam a finalização e podem gerar atrito desnecessário
+    se usados em excesso.
+
+  - Use o tipo Foto para itens que exigem evidência visual. Isso cria um
+    registro rastreável de conformidade.
+
+  - Crie checklists separados por turno. Um checklist de "Abertura" e
+    outro de "Fechamento" são mais práticos do que um único documento longo.
+
+  - Revise os checklists mensalmente. Processos mudam e as listas devem
+    refletir a realidade atual da operação.
+
+ESTOQUE
+
+  - Configure o estoque mínimo para todos os ingredientes essenciais.
+    A regra prática: mínimo = consumo em 2 dias de operação.
+
+  - Realize contagens periódicas (semanais ou quinzenais) para manter o
+    saldo do sistema alinhado com o estoque físico.
+
+  - Use o tipo Compras quando a mercadoria chegar — não espere acumular
+    várias compras para registrar.
+
+  - Atribua cada lista de contagem a um colaborador diferente para dividir
+    a responsabilidade e agilizar o processo.
+
+  - Exporte o TXT após cada contagem finalizada para arquivar fisicamente
+    se necessário.
+
+EQUIPE
+
+  - Oriente os colaboradores a sempre fazer login antes de iniciar qualquer
+    tarefa para garantir o registro correto no histórico.
+
+  - No celular, adicione o endereço do sistema à tela inicial como atalho.
+    Funciona como um aplicativo sem precisar instalar nada.
+
+  - Desative imediatamente o acesso de colaboradores que saírem da empresa.
+    Isso é feito em menos de 30 segundos em Menu → Equipe.
+
+SEGURANÇA
+
+  - Nunca compartilhe sua senha com outras pessoas.
+  - Troque sua senha periodicamente (recomendado a cada 90 dias).
+  - Em caso de suspeita de acesso não autorizado, use a opção de forçar
+    troca de senha em massa disponível no menu da equipe.
+
+
+================================================================================
+9. PERGUNTAS FREQUENTES
+================================================================================
+
+O colaborador não consegue fazer login. O que fazer?
+  Verifique se o e-mail informado está correto e se o colaborador está
+  ativo em Menu → Equipe. Se necessário, redefina a senha pelo painel.
+
+O checklist some após o colaborador finalizar. É normal?
+  Sim. Após a finalização o sistema mostra a tela de comprovante. O
+  checklist fica disponível no histórico para consulta.
+
+Posso editar um checklist que já foi executado?
+  Sim. Edições no checklist não afetam execuções passadas. Novas execuções
+  usarão a versão atualizada.
+
+A lista de estoque foi finalizada por engano. O que fazer?
+  Listas finalizadas não podem ser revertidas automaticamente. Para
+  corrigir um valor use o lançamento manual de movimento (ajuste) no
+  produto afetado.
+
+Por que alguns produtos não têm o saldo atualizado após finalizar a lista?
+  Apenas itens vinculados ao catálogo (selecionados pelo autocomplete) e
+  com quantidade preenchida atualizam o saldo. Itens digitados manualmente
+  sem selecionar do catálogo, e itens sem quantidade, são ignorados.
+
+Como sei que a contagem foi salva?
+  Na tela de execução, cada campo salva automaticamente ao perder o foco
+  (ao tocar em outro campo ou sair do campo). O ícone do item muda para
+  verde confirmando o salvamento.
+
+Posso usar o sistema em dois dispositivos ao mesmo tempo?
+  Sim. O sistema suporta múltiplas sessões simultâneas. Porém, evite
+  editar a mesma lista de dois dispositivos ao mesmo tempo para não
+  sobrescrever dados.
+
+Onde fico os relatórios de execuções antigas?
+  Em Menu → Relatórios e também no histórico individual de cada checklist
+  em Menu → Checklists → (selecione o checklist) → Histórico.
+
+
+================================================================================
+                    CheckList Pro · Versão 1.0 · Junho 2026
+       Para suporte acesse: Menu lateral → Ajuda · contato@checklistpro.com
+================================================================================
