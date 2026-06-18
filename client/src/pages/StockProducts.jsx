@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Plus, Edit2, Trash2, AlertTriangle, Package, X, Check, Search, Download } from 'lucide-react'
+import { Plus, Edit2, Trash2, AlertTriangle, Package, X, Check, Search, Download, CheckSquare, Square } from 'lucide-react'
 import api from '../services/api'
 import toast from 'react-hot-toast'
 import { RESTAURANT_PRODUCTS, TOTAL_PRODUCTS, PRODUCT_CATEGORIES } from '../data/restaurantProducts'
@@ -302,6 +302,8 @@ export default function StockProducts() {
   const [showInactive, setShowInactive] = useState(false)
   const [showImport, setShowImport] = useState(false)
   const [filterCategory, setFilterCategory] = useState('')
+  const [selectedIds, setSelectedIds] = useState(new Set())
+  const [bulkDeleting, setBulkDeleting] = useState(false)
 
   const load = async () => {
     setLoading(true)
@@ -328,11 +330,50 @@ export default function StockProducts() {
     }
   }
 
+  const handleBulkDelete = async () => {
+    const count = selectedIds.size
+    if (!confirm(`Desativar ${count} produto(s) selecionado(s)?`)) return
+    setBulkDeleting(true)
+    let ok = 0, fail = 0
+    for (const id of selectedIds) {
+      try {
+        await api.delete(`/stock/products/${id}`)
+        ok++
+      } catch {
+        fail++
+      }
+    }
+    setBulkDeleting(false)
+    setSelectedIds(new Set())
+    if (ok > 0) toast.success(`${ok} produto(s) desativado(s)`)
+    if (fail > 0) toast.error(`${fail} produto(s) com erro`)
+    load()
+  }
+
+  const toggleSelect = (id) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
+
+  const toggleSelectAll = () => {
+    const activeFiltered = filtered.filter(p => p.is_active)
+    if (activeFiltered.every(p => selectedIds.has(p.id))) {
+      setSelectedIds(new Set())
+    } else {
+      setSelectedIds(new Set(activeFiltered.map(p => p.id)))
+    }
+  }
+
   const filtered = products.filter(p =>
     (p.name.includes(search.toUpperCase()) || (p.unit || '').includes(search.toUpperCase())) &&
     (!filterCategory || p.category === filterCategory)
   )
   const belowMin = products.filter(p => p.is_active && parseFloat(p.current_stock) < parseFloat(p.min_stock) && parseFloat(p.min_stock) > 0)
+  const activeFiltered = filtered.filter(p => p.is_active)
+  const allActiveSelected = activeFiltered.length > 0 && activeFiltered.every(p => selectedIds.has(p.id))
 
   return (
     <div className="space-y-6">
@@ -390,11 +431,44 @@ export default function StockProducts() {
         </label>
       </div>
 
+      {/* Barra de ação em massa */}
+      {selectedIds.size > 0 && (
+        <div className="flex items-center justify-between bg-rose-500/10 border border-rose-500/30 rounded-xl px-4 py-3">
+          <span className="text-sm text-rose-300 font-medium">
+            {selectedIds.size} produto(s) selecionado(s)
+          </span>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setSelectedIds(new Set())}
+              className="text-xs text-dark-400 hover:text-white px-3 py-1.5 rounded-lg hover:bg-dark-700 transition-colors"
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={handleBulkDelete}
+              disabled={bulkDeleting}
+              className="flex items-center gap-2 text-xs px-3 py-1.5 bg-rose-500/20 text-rose-400 hover:bg-rose-500/30 rounded-lg transition-colors disabled:opacity-50 font-semibold"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              {bulkDeleting ? 'Desativando...' : 'Desativar selecionados'}
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="bg-dark-800/50 border border-dark-700/50 rounded-2xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
               <tr className="border-b border-dark-700">
+                <th className="px-4 py-4 w-10">
+                  <button onClick={toggleSelectAll} className="text-dark-400 hover:text-white transition-colors">
+                    {allActiveSelected
+                      ? <CheckSquare className="w-4 h-4 text-primary-400" />
+                      : <Square className="w-4 h-4" />
+                    }
+                  </button>
+                </th>
                 <th className="text-left px-6 py-4 text-xs font-semibold text-dark-400 uppercase tracking-wider">Produto</th>
                 <th className="text-left px-4 py-4 text-xs font-semibold text-dark-400 uppercase tracking-wider hidden md:table-cell">Categoria</th>
                 <th className="text-center px-4 py-4 text-xs font-semibold text-dark-400 uppercase tracking-wider">Unid.</th>
@@ -406,9 +480,9 @@ export default function StockProducts() {
             </thead>
             <tbody className="divide-y divide-dark-700/50">
               {loading ? (
-                <tr><td colSpan={6} className="py-12 text-center text-dark-400">Carregando...</td></tr>
+                <tr><td colSpan={7} className="py-12 text-center text-dark-400">Carregando...</td></tr>
               ) : filtered.length === 0 ? (
-                <tr><td colSpan={7} className="py-12 text-center">
+                <tr><td colSpan={8} className="py-12 text-center">
                   <Package className="w-10 h-10 text-dark-600 mx-auto mb-3" />
                   <p className="text-dark-400">Nenhum produto encontrado</p>
                   <button onClick={() => setModalProduct(null)} className="mt-3 text-primary-400 hover:text-primary-300 text-sm">+ Cadastrar produto</button>
@@ -417,6 +491,16 @@ export default function StockProducts() {
                 const isLow = p.is_active && parseFloat(p.min_stock) > 0 && parseFloat(p.current_stock) < parseFloat(p.min_stock)
                 return (
                   <tr key={p.id} className={`hover:bg-dark-700/30 transition-colors ${!p.is_active ? 'opacity-50' : ''}`}>
+                    <td className="px-4 py-4 w-10">
+                      {p.is_active && (
+                        <button onClick={() => toggleSelect(p.id)} className="text-dark-400 hover:text-primary-400 transition-colors">
+                          {selectedIds.has(p.id)
+                            ? <CheckSquare className="w-4 h-4 text-primary-400" />
+                            : <Square className="w-4 h-4" />
+                          }
+                        </button>
+                      )}
+                    </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2">
                         <span className="text-white font-medium">{p.name}</span>
