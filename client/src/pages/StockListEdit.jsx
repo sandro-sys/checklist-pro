@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Plus, Trash2, Download, CheckCircle, AlertTriangle, Search, Package, Edit2, Save, X, ClipboardCheck, User, Sparkles } from 'lucide-react'
+import { ArrowLeft, Plus, Trash2, Download, CheckCircle, AlertTriangle, Search, Package, Edit2, Save, X, ClipboardCheck, User, Sparkles, ListPlus, Check } from 'lucide-react'
 import api from '../services/api'
 import toast from 'react-hot-toast'
 
@@ -222,6 +222,134 @@ function ItemRow({ item, finalized, onUpdate, onDelete }) {
   )
 }
 
+function BulkAddModal({ listId, products, existingNames, onClose, onDone }) {
+  const [search, setSearch] = useState('')
+  const [selected, setSelected] = useState(new Set())
+  const [adding, setAdding] = useState(false)
+  const [progress, setProgress] = useState(null)
+
+  const available = products.filter(p =>
+    !existingNames.has(p.name) &&
+    (search === '' || p.name.includes(search.toUpperCase()))
+  )
+
+  const toggle = (id) => setSelected(prev => {
+    const next = new Set(prev)
+    next.has(id) ? next.delete(id) : next.add(id)
+    return next
+  })
+
+  const toggleAll = () => {
+    if (available.every(p => selected.has(p.id))) {
+      setSelected(new Set())
+    } else {
+      setSelected(new Set(available.map(p => p.id)))
+    }
+  }
+
+  const handleAdd = async () => {
+    const toAdd = products.filter(p => selected.has(p.id))
+    if (toAdd.length === 0) return
+    setAdding(true)
+    let ok = 0
+    for (let i = 0; i < toAdd.length; i++) {
+      setProgress({ current: i + 1, total: toAdd.length, name: toAdd[i].name })
+      try {
+        await api.post(`/stock/lists/${listId}/items`, {
+          product_id: toAdd[i].id,
+          name: toAdd[i].name,
+          unit: toAdd[i].unit,
+        })
+        ok++
+      } catch { /* skip */ }
+    }
+    setAdding(false)
+    setProgress(null)
+    toast.success(`${ok} produto(s) adicionado(s) à lista`)
+    onDone()
+  }
+
+  const allVisibleSelected = available.length > 0 && available.every(p => selected.has(p.id))
+
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-dark-800 border border-dark-700 rounded-2xl w-full max-w-lg shadow-2xl flex flex-col max-h-[85vh]">
+        <div className="flex items-start justify-between p-5 border-b border-dark-700 flex-shrink-0">
+          <div>
+            <h2 className="text-base font-bold text-white">Adicionar Produtos em Massa</h2>
+            <p className="text-xs text-dark-400 mt-0.5">{selected.size} selecionado(s) — {products.filter(p => existingNames.has(p.name)).length} já na lista</p>
+          </div>
+          <button onClick={onClose} className="p-2 text-dark-400 hover:text-white rounded-lg"><X className="w-5 h-5" /></button>
+        </div>
+
+        <div className="p-4 border-b border-dark-700 flex-shrink-0">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-400" />
+            <input
+              className="w-full bg-dark-700 border border-dark-600 rounded-xl pl-10 pr-4 py-2 text-white placeholder-dark-400 focus:outline-none focus:border-primary-500 text-sm uppercase"
+              placeholder="Filtrar produtos..."
+              value={search}
+              onChange={e => setSearch(e.target.value.toUpperCase())}
+              autoFocus
+            />
+          </div>
+        </div>
+
+        <div className="overflow-y-auto flex-1">
+          <button onClick={toggleAll} className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-dark-700/50 text-left border-b border-dark-700/50 transition-colors">
+            <div className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 transition-colors ${allVisibleSelected ? 'bg-primary-500 border-primary-500' : 'border-dark-500'}`}>
+              {allVisibleSelected && <Check className="w-3 h-3 text-white" />}
+            </div>
+            <span className="text-xs font-semibold text-dark-400 uppercase tracking-wider">Selecionar todos visíveis ({available.length})</span>
+          </button>
+
+          {available.length === 0 ? (
+            <div className="py-10 text-center text-dark-400 text-sm">
+              {search ? 'Nenhum produto encontrado' : 'Todos os produtos já estão na lista'}
+            </div>
+          ) : (
+            available.map(p => (
+              <button key={p.id} onClick={() => toggle(p.id)}
+                className="w-full flex items-center gap-3 px-4 py-3 hover:bg-dark-700/40 text-left transition-colors border-b border-dark-700/20 last:border-0">
+                <div className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 transition-colors ${selected.has(p.id) ? 'bg-primary-500 border-primary-500' : 'border-dark-600'}`}>
+                  {selected.has(p.id) && <Check className="w-3 h-3 text-white" />}
+                </div>
+                <span className="text-sm text-white flex-1">{p.name}</span>
+                {p.has_flavor && <Sparkles className="w-3.5 h-3.5 text-violet-400 flex-shrink-0" title="Requer sabor" />}
+                <span className="text-xs text-dark-500 flex-shrink-0">{p.unit}</span>
+              </button>
+            ))
+          )}
+        </div>
+
+        {adding && progress && (
+          <div className="px-5 py-3 border-t border-dark-700 flex-shrink-0">
+            <div className="flex items-center justify-between text-xs mb-1">
+              <span className="text-dark-400 truncate">{progress.name}</span>
+              <span className="text-white font-medium ml-3">{progress.current}/{progress.total}</span>
+            </div>
+            <div className="w-full bg-dark-700 rounded-full h-1.5">
+              <div className="bg-gradient-to-r from-primary-500 to-accent-teal h-1.5 rounded-full transition-all"
+                style={{ width: `${(progress.current / progress.total) * 100}%` }} />
+            </div>
+          </div>
+        )}
+
+        <div className="flex gap-3 p-5 border-t border-dark-700 flex-shrink-0">
+          <button onClick={onClose} disabled={adding} className="flex-1 py-2.5 rounded-xl border border-dark-600 text-dark-300 hover:text-white transition-colors disabled:opacity-50 text-sm">
+            Cancelar
+          </button>
+          <button onClick={handleAdd} disabled={adding || selected.size === 0}
+            className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-primary-500 to-accent-teal text-white font-semibold text-sm hover:shadow-lg hover:shadow-primary-500/25 transition-all disabled:opacity-50 flex items-center justify-center gap-2">
+            <ListPlus className="w-4 h-4" />
+            {adding ? 'Adicionando...' : `Adicionar ${selected.size} produto${selected.size !== 1 ? 's' : ''}`}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function StockListEdit() {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -232,6 +360,7 @@ export default function StockListEdit() {
   const [loading, setLoading] = useState(true)
   const [finalizing, setFinalizing] = useState(false)
   const [exporting, setExporting] = useState(false)
+  const [showBulkAdd, setShowBulkAdd] = useState(false)
 
   const load = async () => {
     try {
@@ -392,10 +521,15 @@ export default function StockListEdit() {
       <div className="bg-dark-800/50 border border-dark-700/50 rounded-2xl overflow-hidden">
         <div className="flex items-center justify-between px-5 py-4 border-b border-dark-700">
           <h2 className="text-sm font-semibold text-white">{items.length} {items.length === 1 ? 'item' : 'itens'}</h2>
-          {finalized && list.finalized_at && (
+          {finalized && list.finalized_at ? (
             <span className="text-xs text-dark-400">
               Finalizada em {new Date(list.finalized_at).toLocaleDateString('pt-BR')} às {new Date(list.finalized_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
             </span>
+          ) : !finalized && (
+            <button onClick={() => setShowBulkAdd(true)}
+              className="flex items-center gap-2 px-3 py-1.5 bg-primary-500/10 text-primary-400 border border-primary-500/30 rounded-lg text-xs font-semibold hover:bg-primary-500/20 transition-colors">
+              <ListPlus className="w-3.5 h-3.5" /> Adicionar em massa
+            </button>
           )}
         </div>
 
@@ -439,6 +573,16 @@ export default function StockListEdit() {
           listId={id}
           products={products}
           onAdded={(item) => setItems(prev => [...prev, item])}
+        />
+      )}
+
+      {showBulkAdd && (
+        <BulkAddModal
+          listId={id}
+          products={products}
+          existingNames={new Set(items.map(i => i.name))}
+          onClose={() => setShowBulkAdd(false)}
+          onDone={() => { setShowBulkAdd(false); load() }}
         />
       )}
     </div>
