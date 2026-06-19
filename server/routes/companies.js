@@ -213,4 +213,49 @@ router.get('/:id/users', authenticateToken, async (req, res) => {
   }
 });
 
+// Deletar empresa e todos os dados vinculados
+router.delete('/:id', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const company = await dbGetAsync('SELECT * FROM companies WHERE id = ?', [id]);
+    if (!company) return res.status(404).json({ error: 'Empresa não encontrada' });
+
+    // Apenas o owner pode deletar
+    if (company.owner_id !== req.user.id) {
+      return res.status(403).json({ error: 'Apenas o proprietário pode excluir a empresa' });
+    }
+
+    // Remove todos os dados vinculados
+    await dbRunAsync(`DELETE FROM stock_counting_sessions WHERE company_id = ?`, [id]);
+    await dbRunAsync(`DELETE FROM stock_movements WHERE company_id = ?`, [id]);
+    const lists = await dbAllAsync(`SELECT id FROM stock_lists WHERE company_id = ?`, [id]);
+    for (const l of lists) {
+      await dbRunAsync(`DELETE FROM stock_list_items WHERE list_id = ?`, [l.id]);
+    }
+    await dbRunAsync(`DELETE FROM stock_lists WHERE company_id = ?`, [id]);
+    await dbRunAsync(`DELETE FROM products WHERE company_id = ?`, [id]);
+
+    const checklists = await dbAllAsync(`SELECT id FROM checklists WHERE company_id = ?`, [id]);
+    for (const c of checklists) {
+      const execs = await dbAllAsync(`SELECT id FROM checklist_executions WHERE checklist_id = ?`, [c.id]);
+      for (const e of execs) {
+        await dbRunAsync(`DELETE FROM execution_responses WHERE execution_id = ?`, [e.id]);
+      }
+      await dbRunAsync(`DELETE FROM checklist_executions WHERE checklist_id = ?`, [c.id]);
+      await dbRunAsync(`DELETE FROM checklist_items WHERE checklist_id = ?`, [c.id]);
+    }
+    await dbRunAsync(`DELETE FROM checklists WHERE company_id = ?`, [id]);
+    await dbRunAsync(`DELETE FROM checklist_categories WHERE company_id = ?`, [id]);
+    await dbRunAsync(`DELETE FROM roles WHERE company_id = ?`, [id]);
+    await dbRunAsync(`UPDATE users SET company_id = NULL WHERE company_id = ?`, [id]);
+    await dbRunAsync(`DELETE FROM companies WHERE id = ?`, [id]);
+
+    res.json({ message: 'Empresa excluída com sucesso' });
+  } catch (error) {
+    console.error('Erro ao deletar empresa:', error);
+    res.status(500).json({ error: 'Erro ao excluir empresa' });
+  }
+});
+
 export default router;

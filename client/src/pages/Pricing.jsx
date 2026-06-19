@@ -238,8 +238,8 @@ export default function Pricing() {
         </p>
       </motion.div>
 
-      {/* Plans Grid */}
-      <div className="grid md:grid-cols-3 gap-6 lg:gap-8">
+      {/* Plans Grid — temporariamente oculto */}
+      {false && <div className="grid md:grid-cols-3 gap-6 lg:gap-8">
         {PLANS.map((plan, index) => {
           const savings = calculateSavings(plan.originalPrice, plan.price)
           const Icon = plan.icon
@@ -345,7 +345,7 @@ export default function Pricing() {
             </motion.div>
           )
         })}
-      </div>
+      </div>}
 
       {/* FAQ / Info Section */}
       <motion.div

@@ -1,20 +1,24 @@
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import { 
-  Building2, 
-  Save, 
+import {
+  Building2,
+  Save,
   Loader2,
   Plus,
   Tag,
   Lock,
-  CheckCircle2
+  CheckCircle2,
+  Trash2,
+  AlertTriangle
 } from 'lucide-react'
 import api from '../services/api'
 import { useAuthStore } from '../store/authStore'
+import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 
 export default function Company() {
-  const { company, setCompany } = useAuthStore()
+  const { company, setCompany, logout } = useAuthStore()
+  const navigate = useNavigate()
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [activeTab, setActiveTab] = useState('info')
@@ -86,6 +90,26 @@ export default function Company() {
       toast.error(error.response?.data?.error || 'Erro ao salvar')
     } finally {
       setIsSaving(false)
+    }
+  }
+
+  const handleDeleteCompany = async () => {
+    const confirmation = prompt(
+      `Esta ação é irreversível e excluirá TODOS os dados da empresa:\n• Checklists e execuções\n• Listas e contagens de estoque\n• Produtos\n• Usuários vinculados\n\nDigite o nome da empresa para confirmar:`
+    )
+    if (!confirmation) return
+    if (confirmation.trim().toLowerCase() !== company.name.trim().toLowerCase()) {
+      toast.error('Nome incorreto. Exclusão cancelada.')
+      return
+    }
+    try {
+      await api.delete(`/companies/${company.id}`)
+      toast.success('Empresa excluída.')
+      setCompany(null)
+      logout()
+      navigate('/login')
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Erro ao excluir empresa')
     }
   }
 
@@ -453,6 +477,39 @@ export default function Company() {
               )}
             </div>
           </div>
+        )}
+
+        {/* Zona de Perigo */}
+        {company && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3 }}
+            className="bg-rose-500/5 border border-rose-500/20 rounded-2xl p-6"
+          >
+            <div className="flex items-center gap-2 mb-1">
+              <AlertTriangle className="w-5 h-5 text-rose-400" />
+              <h2 className="text-lg font-bold text-rose-400">Zona de Perigo</h2>
+            </div>
+            <p className="text-dark-400 text-sm mb-4">
+              Ações irreversíveis. Tenha certeza antes de prosseguir.
+            </p>
+            <div className="flex items-center justify-between p-4 bg-dark-800/50 border border-rose-500/20 rounded-xl">
+              <div>
+                <p className="text-white font-medium text-sm">Excluir empresa</p>
+                <p className="text-dark-400 text-xs mt-0.5">
+                  Remove permanentemente a empresa e todos os dados vinculados.
+                </p>
+              </div>
+              <button
+                onClick={handleDeleteCompany}
+                className="flex items-center gap-2 px-4 py-2 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-400 hover:text-rose-300 rounded-xl text-sm font-medium transition-colors flex-shrink-0 ml-4"
+              >
+                <Trash2 className="w-4 h-4" />
+                Excluir empresa
+              </button>
+            </div>
+          </motion.div>
         )}
       </motion.div>
     </div>
