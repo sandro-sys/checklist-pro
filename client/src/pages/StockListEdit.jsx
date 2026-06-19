@@ -571,71 +571,91 @@ export default function StockListEdit() {
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
-      {/* Header */}
-      <div className="flex items-start gap-4">
-        <button onClick={() => navigate('/estoque/listas')} className="mt-1 p-2 text-dark-400 hover:text-white hover:bg-dark-800 rounded-xl transition-colors flex-shrink-0">
+      {/* Header — linha 1: navegação + título + ações secundárias */}
+      <div className="flex items-start gap-3">
+        <button onClick={() => navigate('/estoque/listas')}
+          className="mt-1 p-2 text-dark-400 hover:text-white hover:bg-dark-800 rounded-xl transition-colors flex-shrink-0">
           <ArrowLeft className="w-5 h-5" />
         </button>
+
         <div className="flex-1 min-w-0">
+          {/* Tipo + status */}
           <div className="flex items-center gap-2 flex-wrap mb-1">
-            <span className="text-xs text-dark-400 uppercase tracking-wider">{TYPE_LABELS[list.type]}</span>
-            {finalized && (
-              <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
-                <CheckCircle className="w-3 h-3" /> Finalizada
-              </span>
-            )}
+            <span className="text-xs text-dark-500 uppercase tracking-wider font-medium">{TYPE_LABELS[list.type]}</span>
+            {finalized
+              ? <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1"><CheckCircle className="w-3 h-3" /> Finalizada</span>
+              : <span className="text-xs px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30">Em edição</span>
+            }
           </div>
-          <h1 className="text-2xl font-bold text-white truncate">{list.name}</h1>
+
+          {/* Título — sem truncate para não cortar */}
+          <h1 className="text-xl font-bold text-white leading-snug">{list.name}</h1>
           {list.notes && <p className="text-dark-400 text-sm mt-0.5">{list.notes}</p>}
-          {/* Atribuição */}
-          {!finalized && users.length > 0 && (
-            <div className="flex items-center gap-2 mt-2">
-              <User className="w-3.5 h-3.5 text-dark-500 flex-shrink-0" />
-              <select
-                value={list.assigned_to || ''}
-                onChange={e => handleAssign(e.target.value)}
-                className="text-xs bg-dark-700 border border-dark-600 rounded-lg px-2 py-1 text-dark-300 focus:outline-none focus:border-primary-500 focus:text-white transition-colors"
-              >
-                <option value="">— Sem atribuição —</option>
-                {users.map(u => (
-                  <option key={u.id} value={u.id}>{u.name}</option>
-                ))}
-              </select>
-            </div>
-          )}
-          {finalized && list.assigned_to_name && (
-            <div className="flex items-center gap-1.5 mt-2">
-              <User className="w-3.5 h-3.5 text-dark-500" />
-              <span className="text-xs text-dark-400">{list.assigned_to_name}</span>
-            </div>
-          )}
+          <p className="text-xs text-dark-600 mt-0.5">
+            Criada em {new Date(list.created_at).toLocaleDateString('pt-BR')}
+          </p>
         </div>
-        <div className="flex gap-2 flex-shrink-0">
-          <button onClick={() => setShowShare(true)}
-            className="flex items-center gap-2 px-3 py-2 bg-dark-800 border border-dark-700 text-dark-300 hover:text-white hover:border-dark-600 rounded-xl text-sm transition-colors">
-            <Share2 className="w-4 h-4" /> Compartilhar
+
+        {/* Ações secundárias — ícones, sem texto */}
+        <div className="flex items-center gap-1 flex-shrink-0 mt-1">
+          <button onClick={() => setShowShare(true)} title="Compartilhar link de contagem"
+            className="p-2 text-dark-400 hover:text-primary-400 hover:bg-primary-500/10 rounded-xl transition-colors">
+            <Share2 className="w-4.5 h-4.5" />
           </button>
-          <button onClick={handleExport} disabled={exporting}
-            className="flex items-center gap-2 px-3 py-2 bg-dark-800 border border-dark-700 text-dark-300 hover:text-white hover:border-dark-600 rounded-xl text-sm transition-colors">
-            <Download className="w-4 h-4" /> {exporting ? 'Exportando...' : 'Exportar TXT'}
+          <button onClick={handleExport} disabled={exporting} title="Exportar TXT"
+            className="p-2 text-dark-400 hover:text-primary-400 hover:bg-primary-500/10 rounded-xl transition-colors disabled:opacity-50">
+            <Download className="w-4.5 h-4.5" />
           </button>
+        </div>
+      </div>
+
+      {/* Header — linha 2: colaborador + ações principais */}
+      <div className="flex items-center gap-3 flex-wrap">
+        {/* Atribuição — campo com label clara */}
+        {!finalized && users.length > 0 && (
+          <div className="flex items-center gap-2 bg-dark-800 border border-dark-700 hover:border-dark-600 rounded-xl px-3 py-2 transition-colors">
+            <User className="w-4 h-4 text-dark-500 flex-shrink-0" />
+            <span className="text-xs text-dark-500 whitespace-nowrap">Responsável:</span>
+            <select
+              value={list.assigned_to || ''}
+              onChange={e => handleAssign(e.target.value)}
+              className="text-sm bg-transparent border-none text-white focus:outline-none cursor-pointer max-w-[180px]"
+            >
+              <option value="" className="bg-dark-800">— Sem atribuição —</option>
+              {users.map(u => (
+                <option key={u.id} value={u.id} className="bg-dark-800">{u.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
+        {finalized && list.assigned_to_name && (
+          <div className="flex items-center gap-2 bg-dark-800/50 border border-dark-700/50 rounded-xl px-3 py-2">
+            <User className="w-4 h-4 text-dark-500" />
+            <span className="text-xs text-dark-500">Responsável:</span>
+            <span className="text-sm text-white">{list.assigned_to_name}</span>
+          </div>
+        )}
+
+        {/* Ações principais — lado direito */}
+        <div className="flex items-center gap-2 ml-auto flex-wrap justify-end">
           {!finalized && items.length > 0 && (
-            <>
-              <button onClick={handleReset} disabled={resetting}
-                className="flex items-center gap-2 px-3 py-2 bg-dark-800 border border-dark-700 text-amber-400 hover:text-amber-300 hover:border-amber-500/30 rounded-xl text-sm transition-colors disabled:opacity-50"
-                title="Zerar contagem e reiniciar (métricas são preservadas)">
-                <RotateCcw className="w-4 h-4" /> {resetting ? 'Limpando...' : 'Limpar e Recontar'}
-              </button>
-              <button onClick={() => navigate(`/estoque/listas/${id}/executar`)}
-                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-primary-500 to-accent-teal text-white font-semibold rounded-xl hover:shadow-lg hover:shadow-primary-500/25 transition-all text-sm">
-                <ClipboardCheck className="w-4 h-4" /> Iniciar Contagem
-              </button>
-            </>
+            <button onClick={handleReset} disabled={resetting}
+              className="flex items-center gap-1.5 px-3 py-2 border border-amber-500/30 text-amber-400 hover:bg-amber-500/10 rounded-xl text-sm transition-colors disabled:opacity-50">
+              <RotateCcw className="w-3.5 h-3.5" />
+              {resetting ? 'Limpando...' : 'Limpar e Recontar'}
+            </button>
+          )}
+          {!finalized && items.length > 0 && (
+            <button onClick={() => navigate(`/estoque/listas/${id}/executar`)}
+              className="flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-primary-500 to-accent-teal text-white font-semibold rounded-xl hover:shadow-lg hover:shadow-primary-500/25 transition-all text-sm">
+              <ClipboardCheck className="w-4 h-4" /> Iniciar Contagem
+            </button>
           )}
           {!finalized && (
             <button onClick={handleFinalize} disabled={finalizing || items.length === 0}
-              className="flex items-center gap-2 px-4 py-2 bg-dark-800 border border-dark-700 text-dark-300 hover:text-white hover:border-dark-600 rounded-xl hover:shadow-lg transition-all disabled:opacity-50 text-sm">
-              <CheckCircle className="w-4 h-4" /> {finalizing ? 'Finalizando...' : 'Finalizar Lista'}
+              className="flex items-center gap-1.5 px-4 py-2 bg-dark-800 border border-dark-700 text-dark-300 hover:text-white hover:border-dark-600 rounded-xl transition-all disabled:opacity-50 text-sm">
+              <CheckCircle className="w-4 h-4" />
+              {finalizing ? 'Finalizando...' : 'Finalizar Lista'}
             </button>
           )}
         </div>
