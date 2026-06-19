@@ -19,9 +19,9 @@ function ItemCard({ item, listId, onSave, disabled }) {
 
   const filled = quantity !== ''
 
-  const save = async () => {
+  const save = async ({ quantityOverride } = {}) => {
     if (disabled) return
-    const qty = quantity !== '' ? parseInt(quantity) : null
+    const qty = quantityOverride !== undefined ? quantityOverride : (quantity !== '' ? parseInt(quantity) : null)
     const prevQty = lastQty.current !== null && lastQty.current !== undefined ? parseInt(lastQty.current) : null
     const changed = qty !== prevQty || flavor !== lastFlavor.current || notes !== lastNotes.current
     if (!changed) return
@@ -70,7 +70,20 @@ function ItemCard({ item, listId, onSave, disabled }) {
         </div>
       </div>
 
-      <div className="flex items-center gap-3 mb-3">
+      <div className="flex items-center gap-2 mb-3">
+        <button
+          type="button"
+          disabled={disabled}
+          onMouseDown={e => e.preventDefault()}
+          onClick={() => {
+            const v = Math.max(0, (parseInt(quantity) || 0) - 1)
+            setQuantity(String(v))
+            save({ quantityOverride: v })
+          }}
+          className={`w-12 h-14 flex-shrink-0 rounded-xl border text-2xl font-bold transition-colors disabled:cursor-not-allowed select-none ${
+            filled ? 'border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10' : 'border-dark-600 text-dark-400 hover:bg-dark-700 hover:text-white'
+          }`}
+        >−</button>
         <input
           type="number"
           min="0"
@@ -78,15 +91,28 @@ function ItemCard({ item, listId, onSave, disabled }) {
           inputMode="numeric"
           value={quantity}
           onChange={e => setQuantity(e.target.value)}
-          onBlur={save}
+          onBlur={() => save()}
           placeholder="0"
           disabled={disabled}
-          className={`flex-1 text-center text-2xl font-bold py-4 rounded-xl border focus:outline-none transition-all disabled:cursor-not-allowed ${
+          className={`flex-1 text-center text-2xl font-bold py-3.5 rounded-xl border focus:outline-none transition-all disabled:cursor-not-allowed ${
             filled
               ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400 focus:border-emerald-400'
               : 'bg-dark-700 border-dark-600 text-white focus:border-primary-500'
           }`}
         />
+        <button
+          type="button"
+          disabled={disabled}
+          onMouseDown={e => e.preventDefault()}
+          onClick={() => {
+            const v = (parseInt(quantity) || 0) + 1
+            setQuantity(String(v))
+            save({ quantityOverride: v })
+          }}
+          className={`w-12 h-14 flex-shrink-0 rounded-xl border text-2xl font-bold transition-colors disabled:cursor-not-allowed select-none ${
+            filled ? 'border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10' : 'border-dark-600 text-dark-400 hover:bg-dark-700 hover:text-white'
+          }`}
+        >+</button>
         <div className="text-dark-300 font-semibold text-sm w-10 text-center flex-shrink-0">
           {item.unit || 'UN'}
         </div>
