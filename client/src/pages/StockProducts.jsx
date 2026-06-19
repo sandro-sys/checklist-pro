@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Plus, Edit2, Trash2, AlertTriangle, Package, X, Check, Search, Download, CheckSquare, Square } from 'lucide-react'
+import { Plus, Edit2, Trash2, AlertTriangle, Package, X, Check, Search, Download, CheckSquare, Square, Copy } from 'lucide-react'
 import api from '../services/api'
 import toast from 'react-hot-toast'
 import { RESTAURANT_PRODUCTS, TOTAL_PRODUCTS, BAKERY_PRODUCTS, TOTAL_BAKERY_PRODUCTS, PRODUCT_CATEGORIES } from '../data/restaurantProducts'
@@ -335,6 +335,16 @@ export default function StockProducts() {
 
   useEffect(() => { load() }, [showInactive])
 
+  const handleCopyProduct = async (product) => {
+    try {
+      await api.post(`/stock/products/${product.id}/copy`)
+      toast.success(`"${product.name}" copiado`)
+      load()
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Erro ao copiar produto')
+    }
+  }
+
   const handleDeactivate = async (product) => {
     if (!confirm(`Desativar "${product.name}"?`)) return
     try {
@@ -549,6 +559,9 @@ export default function StockProducts() {
                           <>
                             <button onClick={() => setMovProduct(p)} className="p-1.5 text-emerald-400 hover:bg-emerald-500/10 rounded-lg transition-colors" title="Lançar movimento">
                               <Check className="w-4 h-4" />
+                            </button>
+                            <button onClick={() => handleCopyProduct(p)} className="p-1.5 text-dark-400 hover:text-primary-400 hover:bg-primary-500/10 rounded-lg transition-colors" title="Copiar produto">
+                              <Copy className="w-4 h-4" />
                             </button>
                             <button onClick={() => setModalProduct(p)} className="p-1.5 text-dark-400 hover:text-white hover:bg-dark-700 rounded-lg transition-colors">
                               <Edit2 className="w-4 h-4" />

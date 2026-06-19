@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, FileText, CheckCircle, Clock, Download, Eye, X, ClipboardList, ClipboardCheck, User, Share2, Copy, ExternalLink, QrCode } from 'lucide-react'
+import { Plus, FileText, CheckCircle, Clock, Download, Eye, X, ClipboardList, ClipboardCheck, User, Share2, Copy, ExternalLink, QrCode, CopyPlus } from 'lucide-react'
 import api from '../services/api'
 import { useAuthStore } from '../store/authStore'
 import toast from 'react-hot-toast'
@@ -209,6 +209,16 @@ export default function StockLists() {
 
   useEffect(() => { load() }, [])
 
+  const handleCopyList = async (list) => {
+    try {
+      const { data } = await api.post(`/stock/lists/${list.id}/copy`)
+      toast.success(`Lista "${list.name}" copiada`)
+      navigate(`/estoque/listas/${data.list.id}`)
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Erro ao copiar lista')
+    }
+  }
+
   const handleExport = async (list) => {
     try {
       const response = await api.get(`/stock/lists/${list.id}/export-txt`, { responseType: 'blob' })
@@ -256,6 +266,9 @@ export default function StockLists() {
         <div className="flex gap-1 flex-shrink-0">
           <button onClick={() => setShareList(list)} className="p-2 text-dark-400 hover:text-primary-400 hover:bg-primary-500/10 rounded-lg transition-colors" title="Compartilhar link de contagem">
             <Share2 className="w-4 h-4" />
+          </button>
+          <button onClick={() => handleCopyList(list)} className="p-2 text-dark-400 hover:text-primary-400 hover:bg-primary-500/10 rounded-lg transition-colors" title="Copiar lista">
+            <CopyPlus className="w-4 h-4" />
           </button>
           <button onClick={() => handleExport(list)} className="p-2 text-dark-400 hover:text-primary-400 hover:bg-primary-500/10 rounded-lg transition-colors" title="Exportar TXT">
             <Download className="w-4 h-4" />

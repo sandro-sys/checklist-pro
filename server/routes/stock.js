@@ -155,6 +155,31 @@ router.delete('/products/:id', async (req, res) => {
   }
 });
 
+// Copiar produto
+router.post('/products/:id/copy', async (req, res) => {
+  if (!guardCompany(req, res)) return;
+  try {
+    const { id } = req.params;
+    const original = await dbGetAsync(`SELECT * FROM products WHERE id = ? AND company_id = ?`, [id, req.user.company_id]);
+    if (!original) return res.status(404).json({ error: 'Produto não encontrado' });
+
+    const newName = `${original.name} (CÓPIA)`;
+    const exists = await dbGetAsync(`SELECT id FROM products WHERE company_id = ? AND name = ? AND is_active = 1`, [req.user.company_id, newName]);
+    if (exists) return res.status(400).json({ error: 'Já existe uma cópia deste produto' });
+
+    const newId = uuidv4();
+    const now = new Date().toISOString();
+    await dbRunAsync(
+      `INSERT INTO products (id, company_id, name, unit, current_stock, min_stock, category, has_flavor, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
+      [newId, req.user.company_id, newName, original.unit, 0, original.min_stock || 0, original.category || 'Outros', original.has_flavor || 0, now, now]
+    );
+    res.json({ product: await dbGetAsync(`SELECT * FROM products WHERE id = ?`, [newId]) });
+  } catch (e) {
+    console.error('Erro ao copiar produto:', e);
+    res.status(500).json({ error: 'Erro ao copiar produto' });
+  }
+});
+
 // ── LISTAS ───────────────────────────────────────────────────────────
 
 router.get('/lists', async (req, res) => {
@@ -455,6 +480,38 @@ router.get('/lists/:id/export-txt', async (req, res) => {
   } catch (e) {
     console.error('Erro ao exportar:', e);
     res.status(500).json({ error: 'Erro ao exportar lista' });
+  }
+});
+
+// Copiar lista (com todos os itens, quantidades zeradas)
+router.post('/lists/:id/copy', async (req, res) => {
+  if (!guardCompany(req, res)) return;
+  try {
+    const { id } = req.params;
+    const original = await dbGetAsync(`SELECT * FROM stock_lists WHERE id = ? AND company_id = ?`, [id, req.user.company_id]);
+    if (!original) return res.status(404).json({ error: 'Lista não encontrada' });
+
+    const items = await dbAllAsync(`SELECT * FROM stock_list_items WHERE list_id = ? ORDER BY order_index ASC`, [id]);
+
+    const newId = uuidv4();
+    const now = new Date().toISOString();
+    await dbRunAsync(
+      `INSERT INTO stock_lists (id, company_id, name, type, status, notes, created_by, assigned_to, created_at, updated_at) VALUES (?, ?, ?, ?, 'editing', ?, ?, ?, ?, ?)`,
+      [newId, req.user.company_id, `${original.name} (CÓPIA)`, original.type, original.notes || null, req.user.id, original.assigned_to || null, now, now]
+    );
+
+    for (const item of items) {
+      await dbRunAsync(
+        `INSERT INTO stock_list_items (id, list_id, product_id, name, unit, quantity, notes, flavor, order_index, created_at) VALUES (?, ?, ?, ?, ?, NULL, NULL, NULL, ?, ?)`,
+        [uuidv4(), newId, item.product_id || null, item.name, item.unit || 'UN', item.order_index, now]
+      );
+    }
+
+    const newList = await dbGetAsync(`SELECT * FROM stock_lists WHERE id = ?`, [newId]);
+    res.json({ list: newList });
+  } catch (e) {
+    console.error('Erro ao copiar lista:', e);
+    res.status(500).json({ error: 'Erro ao copiar lista' });
   }
 });
 
