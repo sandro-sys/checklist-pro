@@ -55,8 +55,8 @@ router.get('/plans', (req, res) => {
 router.get('/subscription', authenticateToken, async (req, res) => {
   try {
     const company = await dbGetAsync(`
-      SELECT id, name, plan, plan_expires_at, mp_subscription_id 
-      FROM companies 
+      SELECT id, name, plan, plan_expires_at, mp_subscription_id, is_blocked
+      FROM companies
       WHERE owner_id = ? OR id = ?
     `, [req.user.id, req.user.company_id]);
 
@@ -74,14 +74,12 @@ router.get('/subscription', authenticateToken, async (req, res) => {
     const planInfo = PLANS[company.plan] || PLANS.trial;
     const hasExpiration = !!company.plan_expires_at;
     const isExpired = hasExpiration && new Date(company.plan_expires_at) < new Date();
-    
-    // Plano ativo se:
-    // - Trial: tem data de expiração E não está expirado
-    // - Pago: tem plano definido E não está expirado
+    const isBlocked = !!company.is_blocked;
+
     const currentPlan = company.plan || null;
     const isTrialActive = currentPlan === 'trial' && hasExpiration && !isExpired;
     const isPaidActive = currentPlan && currentPlan !== 'trial' && !isExpired;
-    const isActive = isTrialActive || isPaidActive;
+    const isActive = !isBlocked && (isTrialActive || isPaidActive);
 
     res.json({
       company_id: company.id,
@@ -89,6 +87,7 @@ router.get('/subscription', authenticateToken, async (req, res) => {
       plan_info: planInfo,
       expires_at: company.plan_expires_at,
       is_expired: isExpired,
+      is_blocked: isBlocked,
       is_active: isActive,
       has_plan: !!currentPlan && hasExpiration,
       subscription: subscription

@@ -28,7 +28,9 @@ import {
   Send,
   Headphones,
   Target,
-  ArrowRight
+  ArrowRight,
+  Lock,
+  Unlock
 } from 'lucide-react'
 import api from '../services/api'
 import { useAuthStore } from '../store/authStore'
@@ -322,6 +324,21 @@ export default function AdminDashboard() {
     }
   }
 
+  const handleToggleBlock = async (company) => {
+    const next = !company.is_blocked
+    const msg = next
+      ? `Bloquear "${company.name}"? O acesso será negado para todos os usuários.`
+      : `Desbloquear "${company.name}"?`
+    if (!confirm(msg)) return
+    try {
+      const { data } = await api.put(`/admin/companies/${company.id}/block`, { is_blocked: next })
+      toast.success(data.message)
+      fetchCompanies()
+    } catch {
+      toast.error('Erro ao alterar bloqueio')
+    }
+  }
+
   const updateCompanyPlan = async (companyId, plan) => {
     try {
       const expiresAt = plan === 'trial' 
@@ -592,9 +609,16 @@ export default function AdminDashboard() {
                               </div>
                             </td>
                             <td className="px-4 py-3 text-center">
-                              <span className={`px-3 py-1 rounded-full text-sm font-medium ${getPlanBadge(company.plan)}`}>
-                                {company.plan || 'free'}
-                              </span>
+                              <div className="flex flex-col items-center gap-1">
+                                <span className={`px-3 py-1 rounded-full text-sm font-medium ${getPlanBadge(company.plan)}`}>
+                                  {company.plan || 'free'}
+                                </span>
+                                {company.is_blocked ? (
+                                  <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-rose-500/20 text-rose-400 flex items-center gap-1">
+                                    <Lock className="w-3 h-3" /> Bloqueado
+                                  </span>
+                                ) : null}
+                              </div>
                             </td>
                             <td className="px-4 py-3 text-center text-white">{company.users_count}</td>
                             <td className="px-4 py-3 text-center text-white">{company.checklists_count}</td>
@@ -603,13 +627,26 @@ export default function AdminDashboard() {
                               {formatDate(company.created_at)}
                             </td>
                             <td className="px-4 py-3 text-center">
-                              <button
-                                onClick={() => fetchCompanyDetails(company.id)}
-                                className="p-2 bg-primary-500/10 text-primary-400 rounded-lg hover:bg-primary-500/20 transition-colors"
-                                title="Ver detalhes"
-                              >
-                                <Eye className="w-4 h-4" />
-                              </button>
+                              <div className="flex items-center justify-center gap-1">
+                                <button
+                                  onClick={() => handleToggleBlock(company)}
+                                  className={`p-2 rounded-lg transition-colors ${
+                                    company.is_blocked
+                                      ? 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20'
+                                      : 'bg-rose-500/10 text-rose-400 hover:bg-rose-500/20'
+                                  }`}
+                                  title={company.is_blocked ? 'Desbloquear acesso' : 'Bloquear acesso'}
+                                >
+                                  {company.is_blocked ? <Unlock className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
+                                </button>
+                                <button
+                                  onClick={() => fetchCompanyDetails(company.id)}
+                                  className="p-2 bg-primary-500/10 text-primary-400 rounded-lg hover:bg-primary-500/20 transition-colors"
+                                  title="Ver detalhes"
+                                >
+                                  <Eye className="w-4 h-4" />
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         ))}

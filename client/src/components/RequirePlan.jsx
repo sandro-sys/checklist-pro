@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { AlertTriangle, CreditCard, Clock, Loader2 } from 'lucide-react'
+import { AlertTriangle, CreditCard, Clock, Loader2, Lock } from 'lucide-react'
 import api from '../services/api'
 import { useAuthStore } from '../store/authStore'
 
@@ -63,8 +63,28 @@ export default function RequirePlan({ children }) {
     )
   }
 
-  // Verifica se tem plano ativo usando a flag do backend
+  const isBlocked = subscription?.is_blocked === true
   const hasActivePlan = subscription?.is_active === true
+
+  if (isBlocked) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] text-center px-4">
+        <div className="w-20 h-20 bg-rose-500/20 rounded-full flex items-center justify-center mb-6">
+          <Lock className="w-10 h-10 text-rose-500" />
+        </div>
+        <h2 className="text-2xl font-bold text-white mb-3">Acesso Bloqueado</h2>
+        <p className="text-dark-400 max-w-md mb-6">
+          O acesso desta empresa foi suspenso. Entre em contato com o suporte para mais informações.
+        </p>
+        <Link
+          to="/dashboard"
+          className="px-6 py-3 bg-dark-700 text-white rounded-xl hover:bg-dark-600 transition-colors"
+        >
+          Voltar ao Dashboard
+        </Link>
+      </div>
+    )
+  }
 
   if (!hasActivePlan) {
     return (
@@ -72,11 +92,11 @@ export default function RequirePlan({ children }) {
         <div className="w-20 h-20 bg-amber-500/20 rounded-full flex items-center justify-center mb-6">
           <CreditCard className="w-10 h-10 text-amber-500" />
         </div>
-        
+
         <h2 className="text-2xl font-bold text-white mb-3">
           Plano Necessário
         </h2>
-        
+
         <p className="text-dark-400 max-w-md mb-6">
           Para acessar esta funcionalidade, você precisa ter um plano ativo.
           Escolha um plano que atenda às necessidades do seu negócio.
@@ -90,7 +110,7 @@ export default function RequirePlan({ children }) {
             <CreditCard className="w-5 h-5" />
             Ver Planos
           </Link>
-          
+
           <Link
             to="/dashboard"
             className="px-6 py-3 bg-dark-700 text-white rounded-xl hover:bg-dark-600 transition-colors"

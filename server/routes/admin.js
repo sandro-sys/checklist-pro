@@ -351,6 +351,24 @@ router.put('/users/:userId/master', async (req, res) => {
   }
 });
 
+// Bloquear / desbloquear empresa manualmente
+router.put('/companies/:companyId/block', async (req, res) => {
+  try {
+    const { companyId } = req.params;
+    const { is_blocked } = req.body;
+
+    const company = await dbGetAsync(`SELECT id, name FROM companies WHERE id = ?`, [companyId]);
+    if (!company) return res.status(404).json({ error: 'Empresa não encontrada' });
+
+    await dbRunAsync(`UPDATE companies SET is_blocked = ? WHERE id = ?`, [is_blocked ? 1 : 0, companyId]);
+
+    res.json({ success: true, message: is_blocked ? `"${company.name}" bloqueada` : `"${company.name}" desbloqueada` });
+  } catch (error) {
+    console.error('Erro ao alterar bloqueio:', error);
+    res.status(500).json({ error: 'Erro ao alterar bloqueio' });
+  }
+});
+
 // Listar mensagens de contato
 router.get('/messages', async (req, res) => {
   try {

@@ -344,6 +344,7 @@ async function initPostgres() {
     )
   `);
   try { await pgPool.query(`ALTER TABLE stock_lists ADD COLUMN assigned_to TEXT`); } catch (_) {}
+  try { await pgPool.query(`ALTER TABLE companies ADD COLUMN is_blocked INTEGER DEFAULT 0`); } catch (_) {}
 
   await pgPool.query(`
     CREATE TABLE IF NOT EXISTS stock_list_items (
@@ -751,6 +752,9 @@ async function initSQLite() {
   } catch (e) {}
   try {
     db.run(`ALTER TABLE companies ADD COLUMN mp_subscription_id TEXT`);
+  } catch (e) {}
+  try {
+    db.run(`ALTER TABLE companies ADD COLUMN is_blocked INTEGER DEFAULT 0`);
   } catch (e) {}
   try {
     db.run(`ALTER TABLE users ADD COLUMN must_change_password INTEGER DEFAULT 0`);
