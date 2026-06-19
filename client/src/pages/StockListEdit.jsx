@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Plus, Trash2, Download, CheckCircle, AlertTriangle, Search, Package, Edit2, Save, X, ClipboardCheck, User, Sparkles, ListPlus, Check, Share2, Copy, ExternalLink, QrCode, RotateCcw } from 'lucide-react'
+import { ArrowLeft, Plus, Trash2, Download, CheckCircle, AlertTriangle, Search, Package, Edit2, Save, X, ClipboardCheck, User, Sparkles, ListPlus, Check, Share2, Copy, ExternalLink, QrCode, RotateCcw, CopyPlus } from 'lucide-react'
 import api from '../services/api'
 import toast from 'react-hot-toast'
 
@@ -138,7 +138,7 @@ function AddItemRow({ listId, products, onAdded }) {
   )
 }
 
-function ItemRow({ item, finalized, onUpdate, onDelete }) {
+function ItemRow({ item, finalized, onUpdate, onDelete, onDuplicate }) {
   const [editing, setEditing] = useState(false)
   const [form, setForm] = useState({ name: item.name, unit: item.unit || 'UN', quantity: item.quantity ?? '', notes: item.notes || '', flavor: item.flavor || '' })
   const [saving, setSaving] = useState(false)
@@ -224,6 +224,12 @@ function ItemRow({ item, finalized, onUpdate, onDelete }) {
       <td className="px-3 py-3">
         {!finalized && (
           <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            {item.product_has_flavor && (
+              <button onClick={() => onDuplicate(item)} title="Duplicar para outro sabor"
+                className="p-1.5 text-dark-400 hover:text-violet-400 hover:bg-violet-500/10 rounded-lg">
+                <CopyPlus className="w-3.5 h-3.5" />
+              </button>
+            )}
             <button onClick={() => setEditing(true)} className="p-1.5 text-dark-400 hover:text-white hover:bg-dark-700 rounded-lg"><Edit2 className="w-3.5 h-3.5" /></button>
             <button onClick={() => onDelete(item.id)} className="p-1.5 text-dark-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg"><Trash2 className="w-3.5 h-3.5" /></button>
           </div>
@@ -526,6 +532,26 @@ export default function StockListEdit() {
     }
   }
 
+  const handleDuplicate = async (item) => {
+    try {
+      const { data } = await api.post(`/stock/lists/${id}/items`, {
+        product_id: item.product_id || undefined,
+        name: item.name,
+        unit: item.unit,
+      })
+      setItems(prev => {
+        const idx = prev.findIndex(i => i.id === item.id)
+        const next = [...prev]
+        // passa has_flavor para o novo item igual ao original
+        next.splice(idx + 1, 0, { ...data.item, product_has_flavor: item.product_has_flavor })
+        return next
+      })
+      toast.success(`${item.name} duplicado — informe o novo sabor`)
+    } catch {
+      toast.error('Erro ao duplicar item')
+    }
+  }
+
   const handleReset = async () => {
     const itemsWithQty = items.filter(i => i.quantity !== null && i.quantity !== undefined)
     if (itemsWithQty.length === 0) {
@@ -716,6 +742,7 @@ export default function StockListEdit() {
                     finalized={finalized}
                     onUpdate={(updated) => setItems(prev => prev.map(i => i.id === updated.id ? { ...i, ...updated } : i))}
                     onDelete={handleDelete}
+                    onDuplicate={handleDuplicate}
                   />
                 ))}
               </tbody>

@@ -1,12 +1,12 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, CheckCircle2, Circle, Package, Settings, CheckCircle, Sparkles } from 'lucide-react'
+import { ArrowLeft, CheckCircle2, Circle, Package, Settings, CheckCircle, Sparkles, CopyPlus } from 'lucide-react'
 import api from '../services/api'
 import toast from 'react-hot-toast'
 
 const TYPE_LABELS = { contagem: 'Contagem de Estoque', compras: 'Lista de Compras', inventario: 'Inventário' }
 
-function ItemCard({ item, onSave }) {
+function ItemCard({ item, onSave, onDuplicate }) {
   const [quantity, setQuantity] = useState(
     item.quantity !== null && item.quantity !== undefined ? String(parseInt(item.quantity)) : ''
   )
@@ -150,6 +150,17 @@ function ItemCard({ item, onSave }) {
         />
       </div>
 
+      {item.product_has_flavor && (
+        <button
+          type="button"
+          onClick={() => onDuplicate(item)}
+          className="mt-3 flex items-center gap-1.5 text-xs text-violet-400 hover:text-violet-300 transition-colors"
+        >
+          <CopyPlus className="w-3.5 h-3.5" />
+          Duplicar para outro sabor
+        </button>
+      )}
+
       {saving && <p className="text-xs text-dark-500 text-right mt-1.5">Salvando...</p>}
     </div>
   )
@@ -176,6 +187,25 @@ export default function StockListExecute() {
   }
 
   useEffect(() => { load() }, [id])
+
+  const handleDuplicate = async (item) => {
+    try {
+      const { data } = await api.post(`/stock/lists/${id}/items`, {
+        product_id: item.product_id || undefined,
+        name: item.name,
+        unit: item.unit,
+      })
+      setItems(prev => {
+        const idx = prev.findIndex(i => i.id === item.id)
+        const next = [...prev]
+        next.splice(idx + 1, 0, { ...data.item, product_has_flavor: item.product_has_flavor })
+        return next
+      })
+      toast.success('Item duplicado — informe o novo sabor')
+    } catch {
+      toast.error('Erro ao duplicar item')
+    }
+  }
 
   const handleFinalize = async () => {
     if (!confirm(`Finalizar "${list.name}"?\n\nOs estoques dos produtos cadastrados serão atualizados. Esta ação não pode ser desfeita.`)) return
@@ -279,6 +309,7 @@ export default function StockListExecute() {
               onSave={(updated) =>
                 setItems(prev => prev.map(i => i.id === updated.id ? updated : i))
               }
+              onDuplicate={handleDuplicate}
             />
           ))}
         </div>
