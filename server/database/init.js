@@ -316,6 +316,7 @@ async function initPostgres() {
       category TEXT DEFAULT 'Outros',
       current_stock DECIMAL(10,3) DEFAULT 0,
       min_stock DECIMAL(10,3) DEFAULT 0,
+      has_flavor INTEGER DEFAULT 0,
       is_active INTEGER DEFAULT 1,
       created_by TEXT NOT NULL,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -325,6 +326,7 @@ async function initPostgres() {
 
   // Migração additive: adicionar category se não existir
   try { await pgPool.query(`ALTER TABLE products ADD COLUMN category TEXT DEFAULT 'Outros'`); } catch (_) {}
+  try { await pgPool.query(`ALTER TABLE products ADD COLUMN has_flavor INTEGER DEFAULT 0`); } catch (_) {}
 
   await pgPool.query(`
     CREATE TABLE IF NOT EXISTS stock_lists (
@@ -352,10 +354,12 @@ async function initPostgres() {
       unit TEXT,
       quantity DECIMAL(10,3),
       notes TEXT,
+      flavor TEXT,
       order_index INTEGER DEFAULT 0,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `);
+  try { await pgPool.query(`ALTER TABLE stock_list_items ADD COLUMN flavor TEXT`); } catch (_) {}
 
   await pgPool.query(`
     CREATE TABLE IF NOT EXISTS stock_movements (
@@ -650,6 +654,7 @@ async function initSQLite() {
       category TEXT DEFAULT 'Outros',
       current_stock REAL DEFAULT 0,
       min_stock REAL DEFAULT 0,
+      has_flavor INTEGER DEFAULT 0,
       is_active INTEGER DEFAULT 1,
       created_by TEXT NOT NULL,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
@@ -657,8 +662,9 @@ async function initSQLite() {
     )
   `);
 
-  // Migração additive: adicionar category se não existir
+  // Migração additive: adicionar category e has_flavor se não existirem
   try { db.run(`ALTER TABLE products ADD COLUMN category TEXT DEFAULT 'Outros'`); } catch (_) {}
+  try { db.run(`ALTER TABLE products ADD COLUMN has_flavor INTEGER DEFAULT 0`); } catch (_) {}
 
   db.run(`
     CREATE TABLE IF NOT EXISTS stock_lists (
@@ -685,10 +691,12 @@ async function initSQLite() {
       unit TEXT,
       quantity REAL,
       notes TEXT,
+      flavor TEXT,
       order_index INTEGER DEFAULT 0,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP
     )
   `);
+  try { db.run(`ALTER TABLE stock_list_items ADD COLUMN flavor TEXT`); } catch (_) {}
 
   db.run(`
     CREATE TABLE IF NOT EXISTS stock_movements (

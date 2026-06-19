@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Plus, Trash2, Download, CheckCircle, AlertTriangle, Search, Package, Edit2, Save, X, ClipboardCheck, User } from 'lucide-react'
+import { ArrowLeft, Plus, Trash2, Download, CheckCircle, AlertTriangle, Search, Package, Edit2, Save, X, ClipboardCheck, User, Sparkles } from 'lucide-react'
 import api from '../services/api'
 import toast from 'react-hot-toast'
 
@@ -13,7 +13,9 @@ function AddItemRow({ listId, products, onAdded }) {
   const [unit, setUnit] = useState('UN')
   const [quantity, setQuantity] = useState('')
   const [notes, setNotes] = useState('')
+  const [flavor, setFlavor] = useState('')
   const [productId, setProductId] = useState(null)
+  const [hasFlavor, setHasFlavor] = useState(false)
   const [showSuggestions, setShowSuggestions] = useState(false)
   const [saving, setSaving] = useState(false)
   const inputRef = useRef(null)
@@ -27,6 +29,7 @@ function AddItemRow({ listId, products, onAdded }) {
     setName(p.name)
     setUnit(p.unit)
     setSearch(p.name)
+    setHasFlavor(!!p.has_flavor)
     setShowSuggestions(false)
     setTimeout(() => document.getElementById('qty-input')?.focus(), 50)
   }
@@ -35,6 +38,7 @@ function AddItemRow({ listId, products, onAdded }) {
     setSearch(val.toUpperCase())
     setName(val.toUpperCase())
     setProductId(null)
+    setHasFlavor(false)
     setShowSuggestions(true)
   }
 
@@ -48,10 +52,11 @@ function AddItemRow({ listId, products, onAdded }) {
         name,
         unit,
         quantity: quantity !== '' ? parseFloat(quantity) : undefined,
-        notes: notes || undefined
+        notes: notes || undefined,
+        flavor: flavor || undefined
       })
       onAdded(data.item)
-      setSearch(''); setName(''); setUnit('UN'); setQuantity(''); setNotes(''); setProductId(null)
+      setSearch(''); setName(''); setUnit('UN'); setQuantity(''); setNotes(''); setFlavor(''); setProductId(null); setHasFlavor(false)
       inputRef.current?.focus()
     } catch (err) {
       toast.error(err.response?.data?.error || 'Erro ao adicionar item')
@@ -80,7 +85,10 @@ function AddItemRow({ listId, products, onAdded }) {
             {suggestions.map(p => (
               <button key={p.id} type="button" onMouseDown={() => selectProduct(p)}
                 className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-dark-700 text-left transition-colors">
-                <span className="text-white text-sm">{p.name}</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-white text-sm">{p.name}</span>
+                  {p.has_flavor && <Sparkles className="w-3 h-3 text-violet-400" />}
+                </div>
                 <span className="text-dark-400 text-xs">{parseFloat(p.current_stock).toLocaleString('pt-BR')} {p.unit}</span>
               </button>
             ))}
@@ -101,11 +109,19 @@ function AddItemRow({ listId, products, onAdded }) {
             className="w-full bg-dark-700 border border-dark-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-primary-500"
             placeholder="0,000" value={quantity} onChange={e => setQuantity(e.target.value)} />
         </div>
-        <div className="sm:col-span-2">
-          <label className="block text-xs text-dark-400 mb-1">Observação</label>
-          <input className="w-full bg-dark-700 border border-dark-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-primary-500"
-            placeholder="Opcional..." value={notes} onChange={e => setNotes(e.target.value)} />
-        </div>
+        {hasFlavor ? (
+          <div className="sm:col-span-2">
+            <label className="block text-xs text-violet-400 mb-1 flex items-center gap-1"><Sparkles className="w-3 h-3" /> Sabor</label>
+            <input className="w-full bg-dark-700 border border-violet-500/40 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-violet-500"
+              placeholder="Ex: Chocolate, Morango..." value={flavor} onChange={e => setFlavor(e.target.value)} />
+          </div>
+        ) : (
+          <div className="sm:col-span-2">
+            <label className="block text-xs text-dark-400 mb-1">Observação</label>
+            <input className="w-full bg-dark-700 border border-dark-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-primary-500"
+              placeholder="Opcional..." value={notes} onChange={e => setNotes(e.target.value)} />
+          </div>
+        )}
       </div>
       <button type="submit" disabled={saving}
         className="w-full py-2.5 bg-primary-500/20 text-primary-400 border border-primary-500/30 rounded-xl text-sm font-semibold hover:bg-primary-500/30 transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
@@ -117,7 +133,7 @@ function AddItemRow({ listId, products, onAdded }) {
 
 function ItemRow({ item, finalized, onUpdate, onDelete }) {
   const [editing, setEditing] = useState(false)
-  const [form, setForm] = useState({ name: item.name, unit: item.unit || 'UN', quantity: item.quantity ?? '', notes: item.notes || '' })
+  const [form, setForm] = useState({ name: item.name, unit: item.unit || 'UN', quantity: item.quantity ?? '', notes: item.notes || '', flavor: item.flavor || '' })
   const [saving, setSaving] = useState(false)
   const isLow = item.product_id && item.product_min_stock != null && parseFloat(form.quantity || 0) < parseFloat(item.product_min_stock || 0) && parseFloat(item.product_min_stock || 0) > 0
 
@@ -156,8 +172,13 @@ function ItemRow({ item, finalized, onUpdate, onDelete }) {
             value={form.quantity} onChange={e => setForm({ ...form, quantity: e.target.value })} autoFocus />
         </td>
         <td className="px-3 py-3">
-          <input className="w-full bg-dark-700 border border-dark-600 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none"
-            value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} placeholder="Obs..." />
+          {item.product_has_flavor ? (
+            <input className="w-full bg-dark-700 border border-violet-500/40 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:border-violet-500"
+              value={form.flavor} onChange={e => setForm({ ...form, flavor: e.target.value })} placeholder="Sabor..." />
+          ) : (
+            <input className="w-full bg-dark-700 border border-dark-600 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none"
+              value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} placeholder="Obs..." />
+          )}
         </td>
         <td className="px-3 py-3">
           <div className="flex gap-1">
@@ -172,9 +193,14 @@ function ItemRow({ item, finalized, onUpdate, onDelete }) {
   return (
     <tr className="hover:bg-dark-700/20 transition-colors group">
       <td className="px-4 py-3">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <span className="text-white text-sm">{item.name}</span>
           {isLow && <AlertTriangle className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" title={`Abaixo do mínimo (${parseFloat(item.product_min_stock).toLocaleString('pt-BR')} ${item.unit})`} />}
+          {item.flavor && (
+            <span className="text-xs px-1.5 py-0.5 rounded bg-violet-500/15 text-violet-300 flex items-center gap-1">
+              <Sparkles className="w-2.5 h-2.5" />{item.flavor}
+            </span>
+          )}
         </div>
       </td>
       <td className="px-3 py-3 text-center text-dark-300 text-sm">{item.unit}</td>
@@ -387,7 +413,7 @@ export default function StockListEdit() {
                   <th className="text-left px-4 py-3 text-xs font-semibold text-dark-400 uppercase">Produto</th>
                   <th className="text-center px-3 py-3 text-xs font-semibold text-dark-400 uppercase">Unid.</th>
                   <th className="text-right px-3 py-3 text-xs font-semibold text-dark-400 uppercase">Quantidade</th>
-                  <th className="text-left px-3 py-3 text-xs font-semibold text-dark-400 uppercase">Observação</th>
+                  <th className="text-left px-3 py-3 text-xs font-semibold text-dark-400 uppercase">Sabor / Obs.</th>
                   <th className="px-3 py-3 w-16"></th>
                 </tr>
               </thead>

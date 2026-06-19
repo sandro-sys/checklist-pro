@@ -33,7 +33,7 @@ router.get('/products', async (req, res) => {
 router.post('/products', async (req, res) => {
   if (!guardCompany(req, res)) return;
   try {
-    const { name, unit, min_stock, category } = req.body;
+    const { name, unit, min_stock, category, has_flavor } = req.body;
     if (!name || !unit) return res.status(400).json({ error: 'Nome e unidade são obrigatórios' });
 
     const normalizedName = name.toUpperCase().trim();
@@ -45,9 +45,9 @@ router.post('/products', async (req, res) => {
 
     const id = uuidv4();
     await dbRunAsync(
-      `INSERT INTO products (id, company_id, name, unit, category, current_stock, min_stock, is_active, created_by)
-       VALUES (?, ?, ?, ?, ?, 0, ?, 1, ?)`,
-      [id, req.user.company_id, normalizedName, unit.toUpperCase().trim(), category || 'Outros', parseFloat(min_stock) || 0, req.user.id]
+      `INSERT INTO products (id, company_id, name, unit, category, current_stock, min_stock, has_flavor, is_active, created_by)
+       VALUES (?, ?, ?, ?, ?, 0, ?, ?, 1, ?)`,
+      [id, req.user.company_id, normalizedName, unit.toUpperCase().trim(), category || 'Outros', parseFloat(min_stock) || 0, has_flavor ? 1 : 0, req.user.id]
     );
     res.status(201).json({ message: 'Produto criado', product: await dbGetAsync(`SELECT * FROM products WHERE id = ?`, [id]) });
   } catch (e) {
@@ -60,17 +60,18 @@ router.put('/products/:id', async (req, res) => {
   if (!guardCompany(req, res)) return;
   try {
     const { id } = req.params;
-    const { name, unit, min_stock, category } = req.body;
+    const { name, unit, min_stock, category, has_flavor } = req.body;
     const product = await dbGetAsync(`SELECT * FROM products WHERE id = ? AND company_id = ?`, [id, req.user.company_id]);
     if (!product) return res.status(404).json({ error: 'Produto não encontrado' });
 
     await dbRunAsync(
-      `UPDATE products SET name = ?, unit = ?, category = ?, min_stock = ?, updated_at = ? WHERE id = ?`,
+      `UPDATE products SET name = ?, unit = ?, category = ?, min_stock = ?, has_flavor = ?, updated_at = ? WHERE id = ?`,
       [
         name ? name.toUpperCase().trim() : product.name,
         unit ? unit.toUpperCase().trim() : product.unit,
         category !== undefined ? category : product.category,
         min_stock !== undefined ? parseFloat(min_stock) : product.min_stock,
+        has_flavor !== undefined ? (has_flavor ? 1 : 0) : product.has_flavor,
         new Date().toISOString(), id
       ]
     );
@@ -152,7 +153,7 @@ router.get('/lists/:id', async (req, res) => {
     if (!list) return res.status(404).json({ error: 'Lista não encontrada' });
 
     const items = await dbAllAsync(
-      `SELECT sli.*, p.current_stock as product_current_stock, p.min_stock as product_min_stock
+      `SELECT sli.*, p.current_stock as product_current_stock, p.min_stock as product_min_stock, p.has_flavor as product_has_flavor
        FROM stock_list_items sli
        LEFT JOIN products p ON sli.product_id = p.id
        WHERE sli.list_id = ?
@@ -198,7 +199,7 @@ router.post('/lists/:id/items', async (req, res) => {
   if (!guardCompany(req, res)) return;
   try {
     const { id } = req.params;
-    const { product_id, name, unit, quantity, notes } = req.body;
+    const { product_id, name, unit, quantity, notes, flavor } = req.body;
 
     const list = await dbGetAsync(`SELECT * FROM stock_lists WHERE id = ? AND company_id = ?`, [id, req.user.company_id]);
     if (!list) return res.status(404).json({ error: 'Lista não encontrada' });
@@ -210,9 +211,9 @@ router.post('/lists/:id/items', async (req, res) => {
     const itemId = uuidv4();
 
     await dbRunAsync(
-      `INSERT INTO stock_list_items (id, list_id, product_id, name, unit, quantity, notes, order_index)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [itemId, id, product_id || null, name.toUpperCase().trim(), unit ? unit.toUpperCase().trim() : null, quantity !== undefined ? parseFloat(quantity) : null, notes || null, nextIndex]
+      `INSERT INTO stock_list_items (id, list_id, product_id, name, unit, quantity, notes, flavor, order_index)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [itemId, id, product_id || null, name.toUpperCase().trim(), unit ? unit.toUpperCase().trim() : null, quantity !== undefined ? parseFloat(quantity) : null, notes || null, flavor || null, nextIndex]
     );
     res.status(201).json({ message: 'Item adicionado', item: await dbGetAsync(`SELECT * FROM stock_list_items WHERE id = ?`, [itemId]) });
   } catch (e) {
@@ -225,7 +226,7 @@ router.put('/lists/:id/items/:itemId', async (req, res) => {
   if (!guardCompany(req, res)) return;
   try {
     const { id, itemId } = req.params;
-    const { name, unit, quantity, notes } = req.body;
+    const { name, unit, quantity, notes, flavor } = req.body;
 
     const list = await dbGetAsync(`SELECT status FROM stock_lists WHERE id = ? AND company_id = ?`, [id, req.user.company_id]);
     if (!list) return res.status(404).json({ error: 'Lista não encontrada' });
@@ -235,12 +236,13 @@ router.put('/lists/:id/items/:itemId', async (req, res) => {
     if (!item) return res.status(404).json({ error: 'Item não encontrado' });
 
     await dbRunAsync(
-      `UPDATE stock_list_items SET name = ?, unit = ?, quantity = ?, notes = ? WHERE id = ?`,
+      `UPDATE stock_list_items SET name = ?, unit = ?, quantity = ?, notes = ?, flavor = ? WHERE id = ?`,
       [
         name ? name.toUpperCase().trim() : item.name,
         unit !== undefined ? (unit ? unit.toUpperCase().trim() : null) : item.unit,
         quantity !== undefined ? parseFloat(quantity) : item.quantity,
         notes !== undefined ? notes : item.notes,
+        flavor !== undefined ? flavor : item.flavor,
         itemId
       ]
     );
@@ -368,7 +370,8 @@ router.get('/lists/:id/export-txt', async (req, res) => {
 
     for (const item of items) {
       const alert = alerts.find(a => a.id === item.id) ? ' (!)' : '';
-      txt += pad(item.name + alert, 26) + padL(fmtQty(item.quantity), 8) + padL(item.unit || '', 6) + '  ' + (item.notes || '') + '\n';
+      const obs = [item.flavor ? `Sabor: ${item.flavor}` : null, item.notes || null].filter(Boolean).join(' | ');
+      txt += pad(item.name + alert, 26) + padL(fmtQty(item.quantity), 8) + padL(item.unit || '', 6) + '  ' + obs + '\n';
     }
 
     txt += div + '\n';

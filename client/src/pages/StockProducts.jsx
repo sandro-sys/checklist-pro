@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { Plus, Edit2, Trash2, AlertTriangle, Package, X, Check, Search, Download, CheckSquare, Square } from 'lucide-react'
 import api from '../services/api'
 import toast from 'react-hot-toast'
-import { RESTAURANT_PRODUCTS, TOTAL_PRODUCTS, PRODUCT_CATEGORIES } from '../data/restaurantProducts'
+import { RESTAURANT_PRODUCTS, TOTAL_PRODUCTS, BAKERY_PRODUCTS, TOTAL_BAKERY_PRODUCTS, PRODUCT_CATEGORIES } from '../data/restaurantProducts'
 
 const UNITS = ['UN', 'KG', 'G', 'L', 'ML', 'CX', 'SC', 'PC', 'DZ', 'MT']
 
@@ -11,7 +11,8 @@ function ProductModal({ product, onClose, onSave }) {
     name: product?.name || '',
     unit: product?.unit || 'UN',
     category: product?.category || 'Outros',
-    min_stock: product?.min_stock ?? 0
+    min_stock: product?.min_stock ?? 0,
+    has_flavor: product?.has_flavor ? true : false
   })
   const [saving, setSaving] = useState(false)
 
@@ -82,6 +83,20 @@ function ProductModal({ product, onClose, onSave }) {
                 onChange={e => setForm({ ...form, min_stock: e.target.value })}
               />
             </div>
+          </div>
+          <div>
+            <label className="flex items-center gap-3 cursor-pointer select-none group">
+              <div
+                onClick={() => setForm({ ...form, has_flavor: !form.has_flavor })}
+                className={`w-10 h-5 rounded-full transition-colors flex-shrink-0 relative ${form.has_flavor ? 'bg-primary-500' : 'bg-dark-600'}`}
+              >
+                <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${form.has_flavor ? 'translate-x-5' : ''}`} />
+              </div>
+              <span className="text-sm text-dark-300 group-hover:text-white transition-colors">
+                Requer informação de sabor
+                <span className="block text-xs text-dark-500">Operador poderá indicar o sabor ao preencher a lista</span>
+              </span>
+            </label>
           </div>
           <div className="flex gap-3 pt-2">
             <button type="button" onClick={onClose} className="flex-1 py-3 rounded-xl border border-dark-600 text-dark-300 hover:text-white hover:border-dark-500 transition-colors">Cancelar</button>
@@ -171,10 +186,10 @@ function MovementModal({ product, onClose, onSave }) {
   )
 }
 
-function ImportModal({ existingNames, onClose, onDone }) {
+function ImportModal({ catalog, title, existingNames, onClose, onDone }) {
   const [selected, setSelected] = useState(() => {
     const init = {}
-    RESTAURANT_PRODUCTS.forEach(g => g.items.forEach(item => { init[item.name] = true }))
+    catalog.forEach(g => g.items.forEach(item => { init[item.name] = true }))
     return init
   })
   const [importing, setImporting] = useState(false)
@@ -187,8 +202,9 @@ function ImportModal({ existingNames, onClose, onDone }) {
     setSelected(prev => { const s = { ...prev }; names.forEach(n => s[n] = !allOn); return s })
   }
 
-  const toImport = RESTAURANT_PRODUCTS.flatMap(g => g.items).filter(i => selected[i.name] && !existingNames.has(i.name))
-  const alreadyExist = RESTAURANT_PRODUCTS.flatMap(g => g.items).filter(i => selected[i.name] && existingNames.has(i.name))
+  const toImport = catalog.flatMap(g => g.items).filter(i => selected[i.name] && !existingNames.has(i.name))
+  const alreadyExist = catalog.flatMap(g => g.items).filter(i => selected[i.name] && existingNames.has(i.name))
+  const totalProducts = catalog.reduce((acc, g) => acc + g.items.length, 0)
 
   const handleImport = async () => {
     if (toImport.length === 0) return toast.error('Nenhum produto novo para importar')
@@ -210,7 +226,6 @@ function ImportModal({ existingNames, onClose, onDone }) {
     onDone()
   }
 
-  const selectedCount = Object.values(selected).filter(Boolean).length
   const newCount = toImport.length
 
   return (
@@ -218,9 +233,9 @@ function ImportModal({ existingNames, onClose, onDone }) {
       <div className="bg-dark-800 border border-dark-700 rounded-2xl w-full max-w-2xl shadow-2xl flex flex-col max-h-[90vh]">
         <div className="flex items-start justify-between p-6 border-b border-dark-700 flex-shrink-0">
           <div>
-            <h2 className="text-lg font-bold text-white">Importar Lista Padrão de Restaurante</h2>
+            <h2 className="text-lg font-bold text-white">{title}</h2>
             <p className="text-sm text-dark-400 mt-1">
-              {TOTAL_PRODUCTS} produtos em {RESTAURANT_PRODUCTS.length} grupos —
+              {totalProducts} produtos em {catalog.length} grupos —
               <span className="text-primary-400 ml-1">{newCount} novos para importar</span>
               {alreadyExist.length > 0 && <span className="text-dark-500 ml-1">({alreadyExist.length} já cadastrados)</span>}
             </p>
@@ -229,7 +244,7 @@ function ImportModal({ existingNames, onClose, onDone }) {
         </div>
 
         <div className="overflow-y-auto flex-1 p-6 space-y-5">
-          {RESTAURANT_PRODUCTS.map(group => {
+          {catalog.map(group => {
             const allOn = group.items.every(i => selected[i.name])
             const someOn = group.items.some(i => selected[i.name])
             return (
@@ -253,6 +268,7 @@ function ImportModal({ existingNames, onClose, onDone }) {
                           {exists && <Check className="w-3 h-3 text-dark-400" />}
                         </div>
                         <span className="text-sm text-dark-200 flex-1">{item.name}</span>
+                        {item.has_flavor && <span className="text-xs text-violet-400 bg-violet-500/10 px-1.5 py-0.5 rounded">sabor</span>}
                         <span className="text-xs text-dark-500">{item.unit}</span>
                         {exists && <span className="text-xs text-dark-500 italic">existente</span>}
                       </button>
@@ -300,7 +316,7 @@ export default function StockProducts() {
   const [modalProduct, setModalProduct] = useState(undefined)
   const [movProduct, setMovProduct] = useState(null)
   const [showInactive, setShowInactive] = useState(false)
-  const [showImport, setShowImport] = useState(false)
+  const [showImport, setShowImport] = useState(null) // null | 'restaurant' | 'bakery'
   const [filterCategory, setFilterCategory] = useState('')
   const [selectedIds, setSelectedIds] = useState(new Set())
   const [bulkDeleting, setBulkDeleting] = useState(false)
@@ -383,8 +399,11 @@ export default function StockProducts() {
           <p className="text-dark-400 text-sm mt-1">{products.filter(p => p.is_active).length} produtos cadastrados</p>
         </div>
         <div className="flex gap-2">
-          <button onClick={() => setShowImport(true)} className="flex items-center gap-2 px-4 py-2.5 bg-dark-800 border border-dark-700 text-dark-300 hover:text-white hover:border-dark-600 rounded-xl transition-all text-sm">
-            <Download className="w-4 h-4" /> Importar Padrão
+          <button onClick={() => setShowImport('bakery')} className="flex items-center gap-2 px-4 py-2.5 bg-dark-800 border border-dark-700 text-dark-300 hover:text-white hover:border-dark-600 rounded-xl transition-all text-sm">
+            <Download className="w-4 h-4" /> Importar Confeitaria
+          </button>
+          <button onClick={() => setShowImport('restaurant')} className="flex items-center gap-2 px-4 py-2.5 bg-dark-800 border border-dark-700 text-dark-300 hover:text-white hover:border-dark-600 rounded-xl transition-all text-sm">
+            <Download className="w-4 h-4" /> Importar Restaurante
           </button>
           <button onClick={() => setModalProduct(null)} className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-primary-500 to-accent-teal text-white font-semibold rounded-xl hover:shadow-lg hover:shadow-primary-500/25 transition-all">
             <Plus className="w-4 h-4" /> Novo Produto
@@ -555,11 +574,22 @@ export default function StockProducts() {
       {movProduct && (
         <MovementModal product={movProduct} onClose={() => setMovProduct(null)} onSave={() => { setMovProduct(null); load() }} />
       )}
-      {showImport && (
+      {showImport === 'restaurant' && (
         <ImportModal
+          catalog={RESTAURANT_PRODUCTS}
+          title="Importar Lista Padrão de Restaurante"
           existingNames={new Set(products.map(p => p.name))}
-          onClose={() => setShowImport(false)}
-          onDone={() => { setShowImport(false); load() }}
+          onClose={() => setShowImport(null)}
+          onDone={() => { setShowImport(null); load() }}
+        />
+      )}
+      {showImport === 'bakery' && (
+        <ImportModal
+          catalog={BAKERY_PRODUCTS}
+          title="Importar Produtos — Confeitaria e Salgados"
+          existingNames={new Set(products.map(p => p.name))}
+          onClose={() => setShowImport(null)}
+          onDone={() => { setShowImport(null); load() }}
         />
       )}
     </div>

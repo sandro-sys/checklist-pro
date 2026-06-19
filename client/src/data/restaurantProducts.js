@@ -7,6 +7,8 @@ export const PRODUCT_CATEGORIES = [
   'Bebidas',
   'Descartáveis e Embalagens',
   'Limpeza',
+  'Salgados Artesanais',
+  'Confeitaria e Doces',
   'Outros',
 ]
 
@@ -104,4 +106,46 @@ export const RESTAURANT_PRODUCTS = [
   },
 ]
 
+export const BAKERY_PRODUCTS = [
+  {
+    group: 'Salgados Artesanais',
+    items: [
+      { name: 'PAO DE QUEIJO CANASTRA',    unit: 'UN', min_stock: 0, category: 'Salgados Artesanais' },
+      { name: 'PAO DE QUEIJO ALAGOAS',     unit: 'UN', min_stock: 0, category: 'Salgados Artesanais' },
+      { name: 'PAO DE QUEIJO SEM LACTOSE', unit: 'UN', min_stock: 0, category: 'Salgados Artesanais' },
+      { name: 'PAO DE QUEIJO TRADICIONAL', unit: 'UN', min_stock: 0, category: 'Salgados Artesanais' },
+      { name: 'SALTENHA CARNE',            unit: 'UN', min_stock: 0, category: 'Salgados Artesanais' },
+      { name: 'SALTENHA CAPONATA',         unit: 'UN', min_stock: 0, category: 'Salgados Artesanais' },
+      { name: 'SALTENHA BROCOLIS',         unit: 'UN', min_stock: 0, category: 'Salgados Artesanais' },
+      { name: 'SALTENHA MARGUERITA',       unit: 'UN', min_stock: 0, category: 'Salgados Artesanais' },
+      { name: 'SALTENHA TOFU',             unit: 'UN', min_stock: 0, category: 'Salgados Artesanais' },
+      { name: 'QUICHE ALHO PORO',          unit: 'UN', min_stock: 0, category: 'Salgados Artesanais' },
+      { name: 'QUICHE COGUMELOS',          unit: 'UN', min_stock: 0, category: 'Salgados Artesanais' },
+      { name: 'EMPADA FRANGO',             unit: 'UN', min_stock: 0, category: 'Salgados Artesanais' },
+      { name: 'STRUDEL SALGADO',           unit: 'UN', min_stock: 0, category: 'Salgados Artesanais' },
+      { name: 'TORTAS TROPICANA',          unit: 'UN', min_stock: 0, category: 'Salgados Artesanais', has_flavor: true },
+      { name: 'TORTAS AMMOFIT',            unit: 'UN', min_stock: 0, category: 'Salgados Artesanais', has_flavor: true },
+    ]
+  },
+  {
+    group: 'Confeitaria e Doces',
+    items: [
+      { name: 'ALFAJOR VEGANO PISTACHE',   unit: 'UN', min_stock: 0, category: 'Confeitaria e Doces' },
+      { name: 'ALFAJOR VEGANO AVELA',      unit: 'UN', min_stock: 0, category: 'Confeitaria e Doces' },
+      { name: 'BOMBONS',                   unit: 'UN', min_stock: 0, category: 'Confeitaria e Doces', has_flavor: true },
+      { name: 'BOLO ESPECIARIAS',          unit: 'UN', min_stock: 0, category: 'Confeitaria e Doces' },
+      { name: 'BOLO ESPECIAL',             unit: 'UN', min_stock: 0, category: 'Confeitaria e Doces' },
+      { name: 'BOLO LARANJA',              unit: 'UN', min_stock: 0, category: 'Confeitaria e Doces' },
+      { name: 'BOLO CENOURA',              unit: 'UN', min_stock: 0, category: 'Confeitaria e Doces' },
+      { name: 'BOLO MIX DE FRUTAS',        unit: 'UN', min_stock: 0, category: 'Confeitaria e Doces' },
+      { name: 'COOKIES DA CASA',           unit: 'UN', min_stock: 0, category: 'Confeitaria e Doces' },
+      { name: 'BROWNIE VEGANO',            unit: 'UN', min_stock: 0, category: 'Confeitaria e Doces' },
+      { name: 'BROWNIE DA CASA',           unit: 'UN', min_stock: 0, category: 'Confeitaria e Doces' },
+      { name: 'STRUDEL DOCE',              unit: 'UN', min_stock: 0, category: 'Confeitaria e Doces' },
+      { name: 'DOCE VIVO',                 unit: 'UN', min_stock: 0, category: 'Confeitaria e Doces', has_flavor: true },
+    ]
+  }
+]
+
 export const TOTAL_PRODUCTS = RESTAURANT_PRODUCTS.reduce((acc, g) => acc + g.items.length, 0)
+export const TOTAL_BAKERY_PRODUCTS = BAKERY_PRODUCTS.reduce((acc, g) => acc + g.items.length, 0)
