@@ -3,6 +3,8 @@ import QRCode from 'qrcode';
 import { dbGetAsync } from '../database/init.js';
 import { authenticateToken } from '../middleware/auth.js';
 
+const FRONTEND_URL = process.env.FRONTEND_URL || 'https://checklist-pro.onrender.com';
+
 const router = express.Router();
 
 // Gerar QR Code para checklist
@@ -17,7 +19,7 @@ router.get('/generate/:checklistId', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'Checklist não encontrado' });
     }
 
-    const qrCodeUrl = `${process.env.FRONTEND_URL || 'https://checklist-pro.onrender.com'}/execute/${checklistId}`;
+    const qrCodeUrl = `${FRONTEND_URL}/execute/${checklistId}`;
 
     const options = {
       width: parseInt(size),
@@ -60,7 +62,7 @@ router.get('/download/:checklistId', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'Checklist não encontrado' });
     }
 
-    const qrCodeUrl = `${process.env.FRONTEND_URL || 'https://checklist-pro.onrender.com'}/execute/${checklistId}`;
+    const qrCodeUrl = `${FRONTEND_URL}/execute/${checklistId}`;
 
     const buffer = await QRCode.toBuffer(qrCodeUrl, {
       width: parseInt(size),
@@ -97,7 +99,7 @@ router.post('/batch', authenticateToken, async (req, res) => {
       const checklist = await dbGetAsync('SELECT id, title FROM checklists WHERE id = ?', [checklistId]);
       
       if (checklist) {
-        const qrCodeUrl = `${process.env.FRONTEND_URL || 'https://checklist-pro.onrender.com'}/execute/${checklistId}`;
+        const qrCodeUrl = `${FRONTEND_URL}/execute/${checklistId}`;
         const qrCode = await QRCode.toDataURL(qrCodeUrl, {
           width: 300,
           margin: 2,
@@ -117,6 +119,32 @@ router.post('/batch', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Erro ao gerar QR Codes em lote:', error);
     res.status(500).json({ error: 'Erro ao gerar QR Codes' });
+  }
+});
+
+// QR Code para lista de estoque (compartilhamento público)
+router.get('/stock/:listId', authenticateToken, async (req, res) => {
+  try {
+    const { listId } = req.params;
+    const { size = 280 } = req.query;
+
+    const list = await dbGetAsync(
+      'SELECT id, name FROM stock_lists WHERE id = ? AND company_id = ?',
+      [listId, req.user.company_id]
+    );
+    if (!list) return res.status(404).json({ error: 'Lista não encontrada' });
+
+    const url = `${FRONTEND_URL}/contar/${listId}`;
+    const dataUrl = await QRCode.toDataURL(url, {
+      width: parseInt(size),
+      margin: 2,
+      color: { dark: '#1a1a2e', light: '#ffffff' }
+    });
+
+    res.json({ qr_code: dataUrl, url, list_name: list.name });
+  } catch (e) {
+    console.error('Erro ao gerar QR para lista de estoque:', e);
+    res.status(500).json({ error: 'Erro ao gerar QR Code' });
   }
 });
 

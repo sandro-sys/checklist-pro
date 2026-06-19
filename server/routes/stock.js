@@ -4,6 +4,65 @@ import { dbRunAsync, dbGetAsync, dbAllAsync, withTransaction } from '../database
 import { authenticateToken } from '../middleware/auth.js';
 
 const router = express.Router();
+
+// ── ENDPOINTS PÚBLICOS (sem autenticação) ─────────────────────────────
+
+router.get('/public/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const list = await dbGetAsync(
+      `SELECT sl.*, comp.name as company_name
+       FROM stock_lists sl
+       LEFT JOIN companies comp ON sl.company_id = comp.id
+       WHERE sl.id = ?`,
+      [id]
+    );
+    if (!list) return res.status(404).json({ error: 'Lista não encontrada' });
+
+    const items = await dbAllAsync(
+      `SELECT sli.*, p.has_flavor as product_has_flavor
+       FROM stock_list_items sli
+       LEFT JOIN products p ON sli.product_id = p.id
+       WHERE sli.list_id = ?
+       ORDER BY sli.order_index ASC, sli.created_at ASC`,
+      [id]
+    );
+    res.json({ ...list, items });
+  } catch (e) {
+    console.error('Erro ao obter lista pública:', e);
+    res.status(500).json({ error: 'Erro ao obter lista' });
+  }
+});
+
+router.put('/public/:id/items/:itemId', async (req, res) => {
+  try {
+    const { id, itemId } = req.params;
+    const { quantity, flavor, notes } = req.body;
+
+    const list = await dbGetAsync(`SELECT status FROM stock_lists WHERE id = ?`, [id]);
+    if (!list) return res.status(404).json({ error: 'Lista não encontrada' });
+    if (list.status === 'finalizada') return res.status(400).json({ error: 'Lista finalizada' });
+
+    const item = await dbGetAsync(`SELECT * FROM stock_list_items WHERE id = ? AND list_id = ?`, [itemId, id]);
+    if (!item) return res.status(404).json({ error: 'Item não encontrado' });
+
+    await dbRunAsync(
+      `UPDATE stock_list_items SET quantity = ?, flavor = ?, notes = ? WHERE id = ?`,
+      [
+        quantity !== undefined ? (quantity !== '' ? parseInt(quantity) : null) : item.quantity,
+        flavor !== undefined ? flavor : item.flavor,
+        notes !== undefined ? notes : item.notes,
+        itemId
+      ]
+    );
+    res.json({ message: 'Item atualizado', item: await dbGetAsync(`SELECT * FROM stock_list_items WHERE id = ?`, [itemId]) });
+  } catch (e) {
+    console.error('Erro ao atualizar item público:', e);
+    res.status(500).json({ error: 'Erro ao atualizar item' });
+  }
+});
+
+// ── ROTAS PROTEGIDAS ──────────────────────────────────────────────────
 router.use(authenticateToken);
 
 function guardCompany(req, res) {

@@ -162,6 +162,16 @@ export default function ChecklistEdit() {
     }
   }
 
+  const handleRegenerateQR = async () => {
+    try {
+      const { data } = await api.post(`/checklists/${id}/regenerate-qrcode`)
+      setFormData(prev => ({ ...prev, qr_code: data.qr_code }))
+      toast.success('QR Code gerado!')
+    } catch (error) {
+      toast.error('Erro ao gerar QR Code')
+    }
+  }
+
   const copyExecuteLink = () => {
     const url = `${window.location.origin}/execute/${id}`
     navigator.clipboard.writeText(url)
@@ -422,13 +432,25 @@ export default function ChecklistEdit() {
               <h2 className="text-lg font-semibold text-white">QR Code</h2>
             </div>
 
-            {formData.qr_code && (
+            {formData.qr_code ? (
               <div className="bg-white p-3 rounded-xl mb-4">
                 <img
                   src={formData.qr_code}
                   alt="QR Code"
                   className="w-full aspect-square"
                 />
+              </div>
+            ) : (
+              <div className="bg-dark-700/50 border border-dashed border-dark-600 rounded-xl p-6 mb-4 text-center">
+                <QrCode className="w-10 h-10 text-dark-500 mx-auto mb-2" />
+                <p className="text-dark-400 text-sm mb-3">QR Code não gerado</p>
+                <button
+                  type="button"
+                  onClick={handleRegenerateQR}
+                  className="text-primary-400 hover:text-primary-300 text-sm font-medium transition-colors"
+                >
+                  Gerar QR Code
+                </button>
               </div>
             )}
 
@@ -440,6 +462,14 @@ export default function ChecklistEdit() {
               >
                 <Download className="w-4 h-4" />
                 Baixar QR Code
+              </button>
+              <button
+                type="button"
+                onClick={handleRegenerateQR}
+                className="flex items-center justify-center gap-2 w-full py-2.5 bg-dark-700 hover:bg-dark-600 text-dark-300 hover:text-white rounded-xl transition-colors text-sm font-medium"
+              >
+                <QrCode className="w-4 h-4" />
+                Regenerar QR Code
               </button>
               <button
                 type="button"

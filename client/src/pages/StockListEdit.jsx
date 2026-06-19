@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Plus, Trash2, Download, CheckCircle, AlertTriangle, Search, Package, Edit2, Save, X, ClipboardCheck, User, Sparkles, ListPlus, Check } from 'lucide-react'
+import { ArrowLeft, Plus, Trash2, Download, CheckCircle, AlertTriangle, Search, Package, Edit2, Save, X, ClipboardCheck, User, Sparkles, ListPlus, Check, Share2, Copy, ExternalLink, QrCode } from 'lucide-react'
 import api from '../services/api'
 import toast from 'react-hot-toast'
 
@@ -105,16 +105,23 @@ function AddItemRow({ listId, products, onAdded }) {
         </div>
         <div>
           <label className="block text-xs text-dark-400 mb-1">Quantidade</label>
-          <input id="qty-input" type="number" min="0" step="0.001"
+          <input id="qty-input" type="number" min="0" step="1" inputMode="numeric"
             className="w-full bg-dark-700 border border-dark-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-primary-500"
-            placeholder="0,000" value={quantity} onChange={e => setQuantity(e.target.value)} />
+            placeholder="0" value={quantity} onChange={e => setQuantity(e.target.value)} />
         </div>
         {hasFlavor ? (
-          <div className="sm:col-span-2">
-            <label className="block text-xs text-violet-400 mb-1 flex items-center gap-1"><Sparkles className="w-3 h-3" /> Sabor</label>
-            <input className="w-full bg-dark-700 border border-violet-500/40 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-violet-500"
-              placeholder="Ex: Chocolate, Morango..." value={flavor} onChange={e => setFlavor(e.target.value)} />
-          </div>
+          <>
+            <div>
+              <label className="block text-xs text-violet-400 mb-1 flex items-center gap-1"><Sparkles className="w-3 h-3" /> Sabor</label>
+              <input className="w-full bg-dark-700 border border-violet-500/40 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-violet-500"
+                placeholder="Ex: Chocolate..." value={flavor} onChange={e => setFlavor(e.target.value)} />
+            </div>
+            <div>
+              <label className="block text-xs text-dark-400 mb-1">Observação</label>
+              <input className="w-full bg-dark-700 border border-dark-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-primary-500"
+                placeholder="Opcional..." value={notes} onChange={e => setNotes(e.target.value)} />
+            </div>
+          </>
         ) : (
           <div className="sm:col-span-2">
             <label className="block text-xs text-dark-400 mb-1">Observação</label>
@@ -167,14 +174,18 @@ function ItemRow({ item, finalized, onUpdate, onDelete }) {
           </select>
         </td>
         <td className="px-3 py-3">
-          <input type="number" min="0" step="0.001"
+          <input type="number" min="0" step="1" inputMode="numeric"
             className="w-full bg-dark-700 border border-primary-500/50 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none text-right"
             value={form.quantity} onChange={e => setForm({ ...form, quantity: e.target.value })} autoFocus />
         </td>
         <td className="px-3 py-3">
           {item.product_has_flavor ? (
-            <input className="w-full bg-dark-700 border border-violet-500/40 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:border-violet-500"
-              value={form.flavor} onChange={e => setForm({ ...form, flavor: e.target.value })} placeholder="Sabor..." />
+            <div className="space-y-1">
+              <input className="w-full bg-dark-700 border border-violet-500/40 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:border-violet-500"
+                value={form.flavor} onChange={e => setForm({ ...form, flavor: e.target.value })} placeholder="Sabor..." />
+              <input className="w-full bg-dark-700 border border-dark-600 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none"
+                value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} placeholder="Obs..." />
+            </div>
           ) : (
             <input className="w-full bg-dark-700 border border-dark-600 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none"
               value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} placeholder="Obs..." />
@@ -206,7 +217,7 @@ function ItemRow({ item, finalized, onUpdate, onDelete }) {
       <td className="px-3 py-3 text-center text-dark-300 text-sm">{item.unit}</td>
       <td className="px-3 py-3 text-right">
         <span className={`font-mono font-semibold text-sm ${item.quantity === null || item.quantity === undefined ? 'text-dark-500 italic' : isLow ? 'text-amber-400' : 'text-white'}`}>
-          {item.quantity !== null && item.quantity !== undefined ? parseFloat(item.quantity).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 3 }) : '—'}
+          {item.quantity !== null && item.quantity !== undefined ? parseInt(item.quantity).toLocaleString('pt-BR') : '—'}
         </span>
       </td>
       <td className="px-3 py-3 text-dark-400 text-sm">{item.notes}</td>
@@ -219,6 +230,100 @@ function ItemRow({ item, finalized, onUpdate, onDelete }) {
         )}
       </td>
     </tr>
+  )
+}
+
+function ShareModal({ listId, listName, onClose }) {
+  const shareUrl = `${window.location.origin}/contar/${listId}`
+  const [qrCode, setQrCode] = useState(null)
+  const [loadingQr, setLoadingQr] = useState(true)
+  const [copied, setCopied] = useState(false)
+
+  useEffect(() => {
+    api.get(`/qrcode/stock/${listId}`)
+      .then(({ data }) => setQrCode(data.qr_code))
+      .catch(() => {})
+      .finally(() => setLoadingQr(false))
+  }, [listId])
+
+  const copyLink = () => {
+    navigator.clipboard.writeText(shareUrl)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+    toast.success('Link copiado!')
+  }
+
+  const openWhatsApp = () => {
+    const text = encodeURIComponent(`Olá! Por favor, preencha a contagem de estoque "${listName}":\n${shareUrl}`)
+    window.open(`https://wa.me/?text=${text}`, '_blank')
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-dark-800 border border-dark-700 rounded-2xl w-full max-w-sm shadow-2xl">
+        <div className="flex items-center justify-between p-5 border-b border-dark-700">
+          <div className="flex items-center gap-2">
+            <Share2 className="w-5 h-5 text-primary-400" />
+            <h2 className="text-base font-bold text-white">Compartilhar Lista</h2>
+          </div>
+          <button onClick={onClose} className="p-1.5 text-dark-400 hover:text-white rounded-lg"><X className="w-5 h-5" /></button>
+        </div>
+
+        <div className="p-5 space-y-4">
+          {/* QR Code */}
+          <div className="bg-white rounded-xl p-3 flex items-center justify-center min-h-[200px]">
+            {loadingQr ? (
+              <div className="text-dark-400 text-sm">Gerando QR Code...</div>
+            ) : qrCode ? (
+              <img src={qrCode} alt="QR Code" className="w-full max-w-[180px] aspect-square" />
+            ) : (
+              <div className="text-dark-400 text-sm text-center">
+                <QrCode className="w-10 h-10 mx-auto mb-2 text-dark-300" />
+                QR Code indisponível
+              </div>
+            )}
+          </div>
+
+          {/* Link */}
+          <div className="bg-dark-700 rounded-xl px-3 py-2.5 flex items-center gap-2">
+            <span className="text-dark-300 text-xs flex-1 truncate">{shareUrl}</span>
+          </div>
+
+          {/* Botões */}
+          <div className="space-y-2">
+            <button
+              onClick={openWhatsApp}
+              className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-sm transition-colors"
+            >
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.890-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+              </svg>
+              Enviar pelo WhatsApp
+            </button>
+            <button
+              onClick={copyLink}
+              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-dark-700 hover:bg-dark-600 text-white text-sm transition-colors"
+            >
+              <Copy className="w-4 h-4" />
+              {copied ? 'Copiado!' : 'Copiar Link'}
+            </button>
+            <a
+              href={shareUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-dark-700 hover:bg-dark-600 text-white text-sm transition-colors"
+            >
+              <ExternalLink className="w-4 h-4" />
+              Abrir em nova aba
+            </a>
+          </div>
+
+          <p className="text-xs text-dark-500 text-center">
+            O colaborador pode preencher a contagem sem precisar fazer login.
+          </p>
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -361,6 +466,7 @@ export default function StockListEdit() {
   const [finalizing, setFinalizing] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [showBulkAdd, setShowBulkAdd] = useState(false)
+  const [showShare, setShowShare] = useState(false)
 
   const load = async () => {
     try {
@@ -485,6 +591,10 @@ export default function StockListEdit() {
           )}
         </div>
         <div className="flex gap-2 flex-shrink-0">
+          <button onClick={() => setShowShare(true)}
+            className="flex items-center gap-2 px-3 py-2 bg-dark-800 border border-dark-700 text-dark-300 hover:text-white hover:border-dark-600 rounded-xl text-sm transition-colors">
+            <Share2 className="w-4 h-4" /> Compartilhar
+          </button>
           <button onClick={handleExport} disabled={exporting}
             className="flex items-center gap-2 px-3 py-2 bg-dark-800 border border-dark-700 text-dark-300 hover:text-white hover:border-dark-600 rounded-xl text-sm transition-colors">
             <Download className="w-4 h-4" /> {exporting ? 'Exportando...' : 'Exportar TXT'}
@@ -583,6 +693,14 @@ export default function StockListEdit() {
           existingNames={new Set(items.map(i => i.name))}
           onClose={() => setShowBulkAdd(false)}
           onDone={() => { setShowBulkAdd(false); load() }}
+        />
+      )}
+
+      {showShare && (
+        <ShareModal
+          listId={id}
+          listName={list.name}
+          onClose={() => setShowShare(false)}
         />
       )}
     </div>

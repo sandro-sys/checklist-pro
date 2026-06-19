@@ -35,6 +35,7 @@ import StockProducts from './pages/StockProducts'
 import StockLists from './pages/StockLists'
 import StockListEdit from './pages/StockListEdit'
 import StockListExecute from './pages/StockListExecute'
+import StockListPublicExecute from './pages/StockListPublicExecute'
 import StockHistory from './pages/StockHistory'
 
 // Protected Route Component
@@ -121,6 +122,9 @@ function App() {
       
       {/* Public Checklist Execution */}
       <Route path="/execute/:checklistId" element={<ChecklistExecute />} />
+
+      {/* Public Stock List Counting */}
+      <Route path="/contar/:id" element={<StockListPublicExecute />} />
       
       {/* Protected Routes */}
       <Route element={

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, CheckCircle2, Circle, Package, Settings, CheckCircle } from 'lucide-react'
+import { ArrowLeft, CheckCircle2, Circle, Package, Settings, CheckCircle, Sparkles } from 'lucide-react'
 import api from '../services/api'
 import toast from 'react-hot-toast'
 
@@ -8,22 +8,22 @@ const TYPE_LABELS = { contagem: 'Contagem de Estoque', compras: 'Lista de Compra
 
 function ItemCard({ item, onSave }) {
   const [quantity, setQuantity] = useState(
-    item.quantity !== null && item.quantity !== undefined ? String(parseFloat(item.quantity)) : ''
+    item.quantity !== null && item.quantity !== undefined ? String(parseInt(item.quantity)) : ''
   )
+  const [flavor, setFlavor] = useState(item.flavor || '')
+  const [notes, setNotes] = useState(item.notes || '')
   const [saving, setSaving] = useState(false)
-  const lastSaved = useRef(item.quantity)
+  const lastQty = useRef(item.quantity)
+  const lastFlavor = useRef(item.flavor || '')
+  const lastNotes = useRef(item.notes || '')
 
   const filled = quantity !== ''
 
-  const handleBlur = async () => {
-    const qty = quantity !== '' ? parseFloat(quantity) : null
-    const prev = lastSaved.current !== null && lastSaved.current !== undefined
-      ? parseFloat(lastSaved.current)
-      : null
-
-    // sem mudança — não chama a API
-    if (qty === prev) return
-    if (qty === null && prev === null) return
+  const save = async () => {
+    const qty = quantity !== '' ? parseInt(quantity) : null
+    const prevQty = lastQty.current !== null && lastQty.current !== undefined ? parseInt(lastQty.current) : null
+    const changed = qty !== prevQty || flavor !== lastFlavor.current || notes !== lastNotes.current
+    if (!changed) return
 
     setSaving(true)
     try {
@@ -31,11 +31,13 @@ function ItemCard({ item, onSave }) {
         name: item.name,
         unit: item.unit,
         quantity: qty,
-        notes: item.notes || undefined
+        flavor: flavor || undefined,
+        notes: notes || undefined
       })
-      lastSaved.current = data.item.quantity
-      // preserva campos de produto que o PUT não devolve
-      onSave({ ...data.item, product_current_stock: item.product_current_stock, product_min_stock: item.product_min_stock })
+      lastQty.current = data.item.quantity
+      lastFlavor.current = data.item.flavor || ''
+      lastNotes.current = data.item.notes || ''
+      onSave({ ...data.item, product_current_stock: item.product_current_stock, product_min_stock: item.product_min_stock, product_has_flavor: item.product_has_flavor })
     } catch {
       toast.error('Erro ao salvar')
     } finally {
@@ -45,11 +47,8 @@ function ItemCard({ item, onSave }) {
 
   return (
     <div className={`p-4 rounded-2xl border transition-all ${
-      filled
-        ? 'bg-emerald-500/10 border-emerald-500/30'
-        : 'bg-dark-800/50 border-dark-700/50'
+      filled ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-dark-800/50 border-dark-700/50'
     }`}>
-      {/* Nome e info */}
       <div className="flex items-start gap-3 mb-3">
         <div className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5 transition-all ${
           filled ? 'bg-emerald-500 text-white' : 'bg-dark-700 text-dark-400'
@@ -57,29 +56,34 @@ function ItemCard({ item, onSave }) {
           {filled ? <CheckCircle2 className="w-5 h-5" /> : <Circle className="w-5 h-5" />}
         </div>
         <div className="flex-1 min-w-0">
-          <p className={`font-semibold text-base leading-snug ${filled ? 'text-emerald-400' : 'text-white'}`}>
-            {item.name}
-          </p>
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className={`font-semibold text-base leading-snug ${filled ? 'text-emerald-400' : 'text-white'}`}>
+              {item.name}
+            </p>
+            {item.product_has_flavor && (
+              <span className="text-xs px-1.5 py-0.5 rounded bg-violet-500/15 text-violet-400 flex items-center gap-1">
+                <Sparkles className="w-2.5 h-2.5" /> sabor
+              </span>
+            )}
+          </div>
           {item.product_id && item.product_current_stock !== null && item.product_current_stock !== undefined && (
             <p className="text-dark-400 text-xs mt-0.5">
-              Estoque atual: {parseFloat(item.product_current_stock).toLocaleString('pt-BR')} {item.unit}
+              Estoque atual: {parseInt(item.product_current_stock).toLocaleString('pt-BR')} {item.unit}
             </p>
-          )}
-          {item.notes && (
-            <p className="text-dark-500 text-xs mt-0.5 italic">{item.notes}</p>
           )}
         </div>
       </div>
 
-      {/* Input de quantidade */}
-      <div className="flex items-center gap-3">
+      {/* Quantidade */}
+      <div className="flex items-center gap-3 mb-3">
         <input
           type="number"
           min="0"
-          step="0.001"
+          step="1"
+          inputMode="numeric"
           value={quantity}
           onChange={e => setQuantity(e.target.value)}
-          onBlur={handleBlur}
+          onBlur={save}
           placeholder="0"
           className={`flex-1 text-center text-2xl font-bold py-4 rounded-xl border focus:outline-none transition-all ${
             filled
@@ -92,9 +96,37 @@ function ItemCard({ item, onSave }) {
         </div>
       </div>
 
-      {saving && (
-        <p className="text-xs text-dark-500 text-right mt-1.5">Salvando...</p>
+      {/* Sabor */}
+      {item.product_has_flavor && (
+        <div className="mb-2">
+          <label className="block text-xs text-violet-400 mb-1 flex items-center gap-1">
+            <Sparkles className="w-3 h-3" /> Sabor
+          </label>
+          <input
+            type="text"
+            className="w-full bg-dark-700 border border-violet-500/40 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-violet-500 placeholder-dark-500"
+            placeholder="Ex: Chocolate, Morango..."
+            value={flavor}
+            onChange={e => setFlavor(e.target.value)}
+            onBlur={save}
+          />
+        </div>
       )}
+
+      {/* Observação */}
+      <div>
+        <label className="block text-xs text-dark-400 mb-1">Observação</label>
+        <input
+          type="text"
+          className="w-full bg-dark-700 border border-dark-600 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-primary-500 placeholder-dark-500"
+          placeholder="Opcional..."
+          value={notes}
+          onChange={e => setNotes(e.target.value)}
+          onBlur={save}
+        />
+      </div>
+
+      {saving && <p className="text-xs text-dark-500 text-right mt-1.5">Salvando...</p>}
     </div>
   )
 }
