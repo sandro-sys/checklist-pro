@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, FileText, CheckCircle, Clock, Download, Eye, X, ClipboardList, ClipboardCheck, User, Share2, Copy, ExternalLink, QrCode, CopyPlus } from 'lucide-react'
+import { Plus, FileText, CheckCircle, Clock, Download, Eye, X, ClipboardList, ClipboardCheck, User, Share2, Copy, ExternalLink, QrCode, CopyPlus, Upload, AlertCircle, Info, ChevronRight, ChevronLeft, Loader2 } from 'lucide-react'
 import api from '../services/api'
 import { useAuthStore } from '../store/authStore'
 import toast from 'react-hot-toast'
@@ -182,11 +182,294 @@ function NewListModal({ onClose, onCreate, users }) {
   )
 }
 
+const TYPE_LABELS_MODAL = { contagem: 'Contagem de Estoque', compras: 'Lista de Compras', inventario: 'Inventário' }
+
+function ImportTxtModal({ onClose, onImported }) {
+  const [step, setStep] = useState('instrucoes') // instrucoes | editar | preview
+  const [name, setName] = useState('')
+  const [type, setType] = useState('contagem')
+  const [content, setContent] = useState('')
+  const [parsed, setParsed] = useState([])
+  const [importing, setImporting] = useState(false)
+
+  const parseContent = (text) => {
+    const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0 && !l.startsWith('#'))
+    return lines.map((line, idx) => {
+      const parts = line.split(';')
+      const itemName = parts[0].trim().toUpperCase()
+      const unit = parts[1] ? parts[1].trim().toUpperCase() : null
+      return { idx: idx + 1, name: itemName, unit, hasUnit: !!parts[1] }
+    }).filter(i => i.name.length > 0)
+  }
+
+  const handleFileUpload = (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = (ev) => setContent(ev.target.result)
+    reader.readAsText(file, 'UTF-8')
+  }
+
+  const goToPreview = () => {
+    if (!name.trim()) { return toast.error('Informe o nome da lista') }
+    if (!content.trim()) { return toast.error('Cole ou carregue o conteúdo da lista') }
+    const items = parseContent(content)
+    if (items.length === 0) return toast.error('Nenhum item válido encontrado')
+    setParsed(items)
+    setStep('preview')
+  }
+
+  const handleImport = async () => {
+    setImporting(true)
+    try {
+      const { data } = await api.post('/stock/lists/import-txt', { name, type, content })
+      toast.success(data.message)
+      onImported(data.list)
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Erro ao importar')
+    } finally {
+      setImporting(false)
+    }
+  }
+
+  const withoutUnit = parsed.filter(i => !i.hasUnit)
+
+  return (
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-dark-800 border border-dark-700 rounded-2xl w-full max-w-2xl max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+
+        {/* Header */}
+        <div className="flex items-center justify-between p-6 border-b border-dark-700 flex-shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 bg-primary-500/20 rounded-xl flex items-center justify-center">
+              <Upload className="w-5 h-5 text-primary-400" />
+            </div>
+            <div>
+              <h2 className="text-white font-semibold">Importar Lista por Texto</h2>
+              <p className="text-dark-400 text-xs">
+                {step === 'instrucoes' ? 'Passo 1 de 3 — Como funciona' : step === 'editar' ? 'Passo 2 de 3 — Configurar e colar' : 'Passo 3 de 3 — Revisar e importar'}
+              </p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-2 text-dark-400 hover:text-white hover:bg-dark-700 rounded-xl transition-colors">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Indicador de progresso */}
+        <div className="flex gap-1 px-6 pt-4 flex-shrink-0">
+          {['instrucoes', 'editar', 'preview'].map((s, i) => (
+            <div key={s} className={`h-1 flex-1 rounded-full transition-all ${step === s || (s === 'instrucoes' && step !== 'instrucoes') || (s === 'editar' && step === 'preview') ? 'bg-primary-500' : 'bg-dark-700'}`} />
+          ))}
+        </div>
+
+        {/* Conteúdo scrollável */}
+        <div className="flex-1 overflow-y-auto p-6">
+
+          {/* PASSO 1: INSTRUÇÕES */}
+          {step === 'instrucoes' && (
+            <div className="space-y-5">
+              <div className="p-4 bg-primary-500/10 border border-primary-500/20 rounded-xl">
+                <div className="flex items-center gap-2 text-primary-400 font-semibold mb-2">
+                  <Info className="w-4 h-4" /> Como preparar o arquivo
+                </div>
+                <p className="text-dark-300 text-sm leading-relaxed">
+                  Crie um arquivo de texto (<span className="text-white font-mono">.txt</span>) ou planilha (<span className="text-white font-mono">.csv</span>) com um produto por linha, no formato:
+                </p>
+              </div>
+
+              {/* Formato */}
+              <div>
+                <p className="text-dark-400 text-xs font-semibold uppercase tracking-wider mb-2">Formato de cada linha</p>
+                <div className="bg-dark-900 border border-dark-700 rounded-xl p-4 font-mono text-sm">
+                  <p className="text-emerald-400">Nome do produto<span className="text-dark-500">;</span>Unidade</p>
+                  <p className="text-dark-400 text-xs mt-2">Exemplos:</p>
+                  <p className="text-white">AÇÚCAR REFINADO<span className="text-primary-400">;</span>KG</p>
+                  <p className="text-white">FARINHA DE TRIGO<span className="text-primary-400">;</span>KG</p>
+                  <p className="text-white">CREME DE LEITE<span className="text-primary-400">;</span>CX</p>
+                  <p className="text-white">CHOCOLATE EM PÓ<span className="text-primary-400">;</span>KG</p>
+                  <p className="text-white">OVOS<span className="text-primary-400">;</span>DZ</p>
+                </div>
+              </div>
+
+              {/* Regras */}
+              <div className="space-y-2">
+                <p className="text-dark-400 text-xs font-semibold uppercase tracking-wider">Regras</p>
+                <div className="space-y-2 text-sm text-dark-300">
+                  <div className="flex items-start gap-2">
+                    <CheckCircle className="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5" />
+                    <span>Separe nome e unidade com ponto e vírgula <span className="font-mono text-white">;</span></span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <CheckCircle className="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5" />
+                    <span>Um produto por linha</span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <CheckCircle className="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5" />
+                    <span>A unidade de medida é opcional — se não informar, o sistema usa <span className="font-mono text-white">UN</span> e você ajusta depois</span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <CheckCircle className="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5" />
+                    <span>Linhas começando com <span className="font-mono text-white">#</span> são ignoradas (comentários)</span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <CheckCircle className="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5" />
+                    <span>Máximo de 500 itens por importação</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Excel */}
+              <div className="p-4 bg-dark-700/50 border border-dark-600 rounded-xl text-sm text-dark-300">
+                <p className="text-white font-medium mb-1">Usando Excel ou Google Sheets?</p>
+                <p>Coloque os nomes na coluna A e as unidades na coluna B, depois salve como <span className="font-mono text-white">CSV (separado por ponto e vírgula)</span>. O arquivo gerado já está no formato correto para importação.</p>
+              </div>
+            </div>
+          )}
+
+          {/* PASSO 2: CONFIGURAR E COLAR */}
+          {step === 'editar' && (
+            <div className="space-y-5">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="col-span-2">
+                  <label className="block text-sm text-dark-300 mb-1.5">Nome da lista <span className="text-rose-400">*</span></label>
+                  <input
+                    type="text"
+                    value={name}
+                    onChange={e => setName(e.target.value)}
+                    placeholder="Ex: Compras da Semana"
+                    className="w-full bg-dark-700 border border-dark-600 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-primary-500 placeholder-dark-500"
+                  />
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-sm text-dark-300 mb-1.5">Tipo</label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {Object.entries(TYPE_LABELS_MODAL).map(([val, label]) => (
+                      <button
+                        key={val}
+                        onClick={() => setType(val)}
+                        className={`py-2 px-3 rounded-xl text-sm font-medium transition-all border ${type === val ? 'bg-primary-500/20 border-primary-500 text-primary-400' : 'bg-dark-700 border-dark-600 text-dark-400 hover:text-white hover:border-dark-500'}`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-sm text-dark-300">Conteúdo da lista <span className="text-rose-400">*</span></label>
+                  <label className="flex items-center gap-1.5 text-xs text-primary-400 hover:text-primary-300 cursor-pointer transition-colors">
+                    <Upload className="w-3.5 h-3.5" />
+                    Carregar arquivo
+                    <input type="file" accept=".txt,.csv" className="hidden" onChange={handleFileUpload} />
+                  </label>
+                </div>
+                <textarea
+                  value={content}
+                  onChange={e => setContent(e.target.value)}
+                  rows={12}
+                  placeholder={"# Cole aqui ou carregue um arquivo\nAÇÚCAR REFINADO;KG\nFARINHA DE TRIGO;KG\nCHOCOLATE EM PÓ;KG\nCREME DE LEITE;CX\nOVOS;DZ"}
+                  className="w-full bg-dark-900 border border-dark-600 rounded-xl px-4 py-3 text-white font-mono text-sm focus:outline-none focus:border-primary-500 placeholder-dark-600 resize-none"
+                  spellCheck={false}
+                />
+                {content && (
+                  <p className="text-xs text-dark-500 mt-1">{parseContent(content).length} item(ns) detectado(s)</p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* PASSO 3: PREVIEW */}
+          {step === 'preview' && (
+            <div className="space-y-4">
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-white font-semibold">{name}</p>
+                  <p className="text-dark-400 text-sm">{TYPE_LABELS_MODAL[type]} · {parsed.length} itens</p>
+                </div>
+                {withoutUnit.length > 0 && (
+                  <div className="flex items-center gap-1.5 text-amber-400 text-xs bg-amber-500/10 border border-amber-500/20 rounded-xl px-3 py-2">
+                    <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                    {withoutUnit.length} sem unidade — será configurado como UN
+                  </div>
+                )}
+              </div>
+
+              <div className="bg-dark-900 border border-dark-700 rounded-xl overflow-hidden">
+                <div className="grid grid-cols-[1fr_auto] gap-4 px-4 py-2 border-b border-dark-700 text-xs text-dark-500 uppercase tracking-wider font-semibold">
+                  <span>Produto</span>
+                  <span className="w-16 text-right">Unidade</span>
+                </div>
+                <div className="max-h-72 overflow-y-auto divide-y divide-dark-700/50">
+                  {parsed.map(item => (
+                    <div key={item.idx} className="grid grid-cols-[1fr_auto] gap-4 px-4 py-2.5 items-center">
+                      <span className="text-white text-sm font-mono">{item.name}</span>
+                      <span className={`w-16 text-right text-sm font-mono ${item.hasUnit ? 'text-emerald-400' : 'text-amber-400'}`}>
+                        {item.unit || 'UN *'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {withoutUnit.length > 0 && (
+                <p className="text-xs text-dark-500">
+                  * Itens marcados com <span className="text-amber-400">UN *</span> não tinham unidade no arquivo. Você poderá ajustar na edição da lista.
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Footer com botões de navegação */}
+        <div className="flex items-center justify-between p-6 border-t border-dark-700 flex-shrink-0">
+          {step === 'instrucoes' && (
+            <>
+              <button onClick={onClose} className="px-4 py-2 text-dark-400 hover:text-white transition-colors text-sm">Cancelar</button>
+              <button onClick={() => setStep('editar')} className="flex items-center gap-2 px-5 py-2.5 bg-primary-500 text-white font-medium rounded-xl hover:bg-primary-600 transition-colors">
+                Continuar <ChevronRight className="w-4 h-4" />
+              </button>
+            </>
+          )}
+          {step === 'editar' && (
+            <>
+              <button onClick={() => setStep('instrucoes')} className="flex items-center gap-2 px-4 py-2 text-dark-400 hover:text-white transition-colors text-sm">
+                <ChevronLeft className="w-4 h-4" /> Voltar
+              </button>
+              <button onClick={goToPreview} className="flex items-center gap-2 px-5 py-2.5 bg-primary-500 text-white font-medium rounded-xl hover:bg-primary-600 transition-colors">
+                Revisar <ChevronRight className="w-4 h-4" />
+              </button>
+            </>
+          )}
+          {step === 'preview' && (
+            <>
+              <button onClick={() => setStep('editar')} className="flex items-center gap-2 px-4 py-2 text-dark-400 hover:text-white transition-colors text-sm">
+                <ChevronLeft className="w-4 h-4" /> Editar
+              </button>
+              <button
+                onClick={handleImport}
+                disabled={importing}
+                className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-primary-500 to-accent-teal text-white font-semibold rounded-xl hover:shadow-lg hover:shadow-primary-500/25 transition-all disabled:opacity-50"
+              >
+                {importing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                {importing ? 'Importando...' : `Importar ${parsed.length} itens`}
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function StockLists() {
   const [lists, setLists] = useState([])
   const [users, setUsers] = useState([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
+  const [showImportTxt, setShowImportTxt] = useState(false)
   const [shareList, setShareList] = useState(null)
   const navigate = useNavigate()
   const { user } = useAuthStore()
@@ -309,9 +592,14 @@ export default function StockLists() {
           <h1 className="text-2xl font-bold text-white">Listas de Estoque</h1>
           <p className="text-dark-400 text-sm mt-1">{lists.length} lista(s) criada(s)</p>
         </div>
-        <button onClick={() => setShowModal(true)} className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-primary-500 to-accent-teal text-white font-semibold rounded-xl hover:shadow-lg hover:shadow-primary-500/25 transition-all">
-          <Plus className="w-4 h-4" /> Nova Lista
-        </button>
+        <div className="flex gap-2">
+          <button onClick={() => setShowImportTxt(true)} className="flex items-center gap-2 px-4 py-2.5 bg-dark-800 border border-dark-700 text-dark-300 hover:text-white hover:border-dark-600 rounded-xl transition-all text-sm">
+            <Upload className="w-4 h-4" /> Importar TXT
+          </button>
+          <button onClick={() => setShowModal(true)} className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-primary-500 to-accent-teal text-white font-semibold rounded-xl hover:shadow-lg hover:shadow-primary-500/25 transition-all">
+            <Plus className="w-4 h-4" /> Nova Lista
+          </button>
+        </div>
       </div>
 
       {loading ? (
@@ -381,6 +669,13 @@ export default function StockLists() {
         <StockShareModal
           list={shareList}
           onClose={() => setShareList(null)}
+        />
+      )}
+
+      {showImportTxt && (
+        <ImportTxtModal
+          onClose={() => setShowImportTxt(false)}
+          onImported={(list) => { setShowImportTxt(false); navigate(`/estoque/listas/${list.id}`) }}
         />
       )}
     </div>

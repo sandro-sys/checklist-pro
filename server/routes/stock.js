@@ -202,6 +202,48 @@ router.get('/lists', async (req, res) => {
   }
 });
 
+// Importar lista a partir de texto (Nome;Unidade por linha)
+router.post('/lists/import-txt', async (req, res) => {
+  if (!guardCompany(req, res)) return;
+  try {
+    const { name, type, notes, content } = req.body;
+    if (!name || !type || !content) return res.status(400).json({ error: 'Nome, tipo e conteúdo são obrigatórios' });
+    if (!['contagem', 'compras', 'inventario'].includes(type))
+      return res.status(400).json({ error: 'Tipo inválido' });
+
+    const lines = content.split('\n').map(l => l.trim()).filter(l => l.length > 0 && !l.startsWith('#'));
+    if (lines.length === 0) return res.status(400).json({ error: 'Nenhum item encontrado no arquivo' });
+    if (lines.length > 500) return res.status(400).json({ error: 'Máximo de 500 itens por importação' });
+
+    const items = lines.map((line, idx) => {
+      const parts = line.split(';');
+      const itemName = parts[0].trim().toUpperCase();
+      const unit = parts[1] ? parts[1].trim().toUpperCase() : null;
+      return { name: itemName, unit, order_index: idx };
+    }).filter(i => i.name.length > 0);
+
+    const listId = uuidv4();
+    const now = new Date().toISOString();
+    await dbRunAsync(
+      `INSERT INTO stock_lists (id, company_id, name, type, status, notes, created_by) VALUES (?, ?, ?, ?, 'editing', ?, ?)`,
+      [listId, req.user.company_id, name.toUpperCase().trim(), type, notes || null, req.user.id]
+    );
+
+    for (const item of items) {
+      await dbRunAsync(
+        `INSERT INTO stock_list_items (id, list_id, name, unit, quantity, order_index, created_at) VALUES (?, ?, ?, ?, NULL, ?, ?)`,
+        [uuidv4(), listId, item.name, item.unit || 'UN', item.order_index, now]
+      );
+    }
+
+    const list = await dbGetAsync(`SELECT * FROM stock_lists WHERE id = ?`, [listId]);
+    res.status(201).json({ message: `Lista criada com ${items.length} itens`, list, items_imported: items.length });
+  } catch (e) {
+    console.error('Erro ao importar lista:', e);
+    res.status(500).json({ error: 'Erro ao importar lista' });
+  }
+});
+
 router.post('/lists', async (req, res) => {
   if (!guardCompany(req, res)) return;
   try {
