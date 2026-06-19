@@ -458,6 +458,122 @@ router.get('/lists/:id/export-txt', async (req, res) => {
   }
 });
 
+// ── SESSÕES DE CONTAGEM ──────────────────────────────────────────────
+
+// Iniciar contagem (registra horário de início)
+router.post('/lists/:id/start-counting', async (req, res) => {
+  if (!guardCompany(req, res)) return;
+  try {
+    const { id } = req.params;
+    const list = await dbGetAsync(
+      `SELECT * FROM stock_lists WHERE id = ? AND company_id = ?`,
+      [id, req.user.company_id]
+    );
+    if (!list) return res.status(404).json({ error: 'Lista não encontrada' });
+    if (list.status === 'finalizada') return res.status(400).json({ error: 'Lista já finalizada' });
+
+    // Verifica se já existe sessão ativa para este usuário nesta lista
+    let session = await dbGetAsync(
+      `SELECT * FROM stock_counting_sessions WHERE list_id = ? AND counted_by = ? AND completed_at IS NULL`,
+      [id, req.user.id]
+    );
+    if (!session) {
+      const sessionId = uuidv4();
+      const now = new Date().toISOString();
+      await dbRunAsync(
+        `INSERT INTO stock_counting_sessions (id, list_id, company_id, counted_by, counted_by_name, started_at) VALUES (?, ?, ?, ?, ?, ?)`,
+        [sessionId, id, req.user.company_id, req.user.id, req.user.name, now]
+      );
+      session = await dbGetAsync(`SELECT * FROM stock_counting_sessions WHERE id = ?`, [sessionId]);
+    }
+    res.json({ session });
+  } catch (e) {
+    console.error('Erro ao iniciar contagem:', e);
+    res.status(500).json({ error: 'Erro ao iniciar contagem' });
+  }
+});
+
+// Concluir contagem (registra horário de fim e contagem de itens)
+router.post('/lists/:id/complete-counting', async (req, res) => {
+  if (!guardCompany(req, res)) return;
+  try {
+    const { id } = req.params;
+    const list = await dbGetAsync(
+      `SELECT * FROM stock_lists WHERE id = ? AND company_id = ?`,
+      [id, req.user.company_id]
+    );
+    if (!list) return res.status(404).json({ error: 'Lista não encontrada' });
+
+    const items = await dbAllAsync(`SELECT * FROM stock_list_items WHERE list_id = ?`, [id]);
+    const filled = items.filter(i => i.quantity !== null && i.quantity !== undefined);
+
+    const now = new Date().toISOString();
+    await dbRunAsync(
+      `UPDATE stock_counting_sessions SET completed_at = ?, items_total = ?, items_filled = ? WHERE list_id = ? AND counted_by = ? AND completed_at IS NULL`,
+      [now, items.length, filled.length, id, req.user.id]
+    );
+
+    const session = await dbGetAsync(
+      `SELECT * FROM stock_counting_sessions WHERE list_id = ? AND counted_by = ? ORDER BY completed_at DESC LIMIT 1`,
+      [id, req.user.id]
+    );
+    res.json({ session });
+  } catch (e) {
+    console.error('Erro ao concluir contagem:', e);
+    res.status(500).json({ error: 'Erro ao concluir contagem' });
+  }
+});
+
+// Limpar e recontar (zera quantidades, preserva sessões)
+router.post('/lists/:id/reset-counting', async (req, res) => {
+  if (!guardCompany(req, res)) return;
+  try {
+    const { id } = req.params;
+    const list = await dbGetAsync(
+      `SELECT * FROM stock_lists WHERE id = ? AND company_id = ?`,
+      [id, req.user.company_id]
+    );
+    if (!list) return res.status(404).json({ error: 'Lista não encontrada' });
+    if (list.status === 'finalizada') return res.status(400).json({ error: 'Lista finalizada — não pode recontar' });
+
+    // Encerra sessão ativa sem completed_at (abandonada)
+    await dbRunAsync(
+      `UPDATE stock_counting_sessions SET completed_at = NULL WHERE list_id = ? AND completed_at IS NULL`,
+      [id]
+    );
+    // Zera todas as quantidades, sabores e obs dos itens
+    await dbRunAsync(
+      `UPDATE stock_list_items SET quantity = NULL, flavor = NULL, notes = NULL WHERE list_id = ?`,
+      [id]
+    );
+    res.json({ message: 'Lista limpa. Pronto para nova contagem.' });
+  } catch (e) {
+    console.error('Erro ao limpar lista:', e);
+    res.status(500).json({ error: 'Erro ao limpar lista' });
+  }
+});
+
+// Listar sessões de contagem da empresa (para dashboard)
+router.get('/sessions', async (req, res) => {
+  if (!guardCompany(req, res)) return;
+  try {
+    const { limit = 20 } = req.query;
+    const sessions = await dbAllAsync(
+      `SELECT scs.*, sl.name as list_name, sl.type as list_type
+       FROM stock_counting_sessions scs
+       LEFT JOIN stock_lists sl ON scs.list_id = sl.id
+       WHERE scs.company_id = ? AND scs.completed_at IS NOT NULL
+       ORDER BY scs.completed_at DESC
+       LIMIT ?`,
+      [req.user.company_id, parseInt(limit)]
+    );
+    res.json(sessions);
+  } catch (e) {
+    console.error('Erro ao obter sessões:', e);
+    res.status(500).json({ error: 'Erro ao obter sessões' });
+  }
+});
+
 // ── MOVIMENTOS MANUAIS ───────────────────────────────────────────────
 
 router.get('/movements', async (req, res) => {

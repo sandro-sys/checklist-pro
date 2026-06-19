@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate } from 'react-router-dom'
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { useAuthStore } from './store/authStore'
 
 // Layouts
@@ -59,6 +59,26 @@ function ProtectedRoute({ children }) {
     return <Navigate to="/change-password" replace />
   }
   
+  return children
+}
+
+// Protected route that redirects to login preserving the current URL
+function ProtectedWithRedirect({ children }) {
+  const { isAuthenticated, isLoading } = useAuthStore()
+  const location = useLocation()
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="spinner"></div>
+      </div>
+    )
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate to={`/login?redirect=${encodeURIComponent(location.pathname)}`} replace />
+  }
+
   return children
 }
 
@@ -123,8 +143,12 @@ function App() {
       {/* Public Checklist Execution */}
       <Route path="/execute/:checklistId" element={<ChecklistExecute />} />
 
-      {/* Public Stock List Counting */}
-      <Route path="/contar/:id" element={<StockListPublicExecute />} />
+      {/* Stock List Counting — requires login, preserves redirect URL */}
+      <Route path="/contar/:id" element={
+        <ProtectedWithRedirect>
+          <StockListPublicExecute />
+        </ProtectedWithRedirect>
+      } />
       
       {/* Protected Routes */}
       <Route element={

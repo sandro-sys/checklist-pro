@@ -362,6 +362,20 @@ async function initPostgres() {
   try { await pgPool.query(`ALTER TABLE stock_list_items ADD COLUMN flavor TEXT`); } catch (_) {}
 
   await pgPool.query(`
+    CREATE TABLE IF NOT EXISTS stock_counting_sessions (
+      id TEXT PRIMARY KEY,
+      list_id TEXT NOT NULL,
+      company_id TEXT NOT NULL,
+      counted_by TEXT NOT NULL,
+      counted_by_name TEXT,
+      started_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      completed_at TIMESTAMP,
+      items_total INTEGER DEFAULT 0,
+      items_filled INTEGER DEFAULT 0
+    )
+  `);
+
+  await pgPool.query(`
     CREATE TABLE IF NOT EXISTS stock_movements (
       id TEXT PRIMARY KEY,
       product_id TEXT NOT NULL,
@@ -697,6 +711,20 @@ async function initSQLite() {
     )
   `);
   try { db.run(`ALTER TABLE stock_list_items ADD COLUMN flavor TEXT`); } catch (_) {}
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS stock_counting_sessions (
+      id TEXT PRIMARY KEY,
+      list_id TEXT NOT NULL,
+      company_id TEXT NOT NULL,
+      counted_by TEXT NOT NULL,
+      counted_by_name TEXT,
+      started_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      completed_at TEXT,
+      items_total INTEGER DEFAULT 0,
+      items_filled INTEGER DEFAULT 0
+    )
+  `);
 
   db.run(`
     CREATE TABLE IF NOT EXISTS stock_movements (

@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { 
-  ClipboardList, 
-  CheckCircle2, 
-  Clock, 
+import {
+  ClipboardList,
+  CheckCircle2,
+  Clock,
   TrendingUp,
   Plus,
   ArrowRight,
@@ -17,7 +17,10 @@ import {
   Activity,
   Zap,
   Award,
-  AlertCircle
+  AlertCircle,
+  Package,
+  Timer,
+  User
 } from 'lucide-react'
 import api from '../services/api'
 import { useAuthStore } from '../store/authStore'
@@ -27,6 +30,7 @@ export default function Dashboard() {
   const { user, company, setCompany } = useAuthStore()
   const [stats, setStats] = useState(null)
   const [checklists, setChecklists] = useState([])
+  const [stockSessions, setStockSessions] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [period, setPeriod] = useState('7')
 
@@ -47,6 +51,12 @@ export default function Dashboard() {
       // Fetch recent checklists
       const checklistsRes = await api.get(`/checklists/company/${companyRes.data.id}?is_active=true`)
       setChecklists(checklistsRes.data.slice(0, 5))
+
+      // Fetch stock counting sessions
+      try {
+        const sessionsRes = await api.get('/stock/sessions?limit=10')
+        setStockSessions(sessionsRes.data)
+      } catch (_) {}
     } catch (error) {
       if (error.response?.status === 404) {
         // User doesn't have a company yet
@@ -237,6 +247,59 @@ export default function Dashboard() {
           </div>
         ))}
       </motion.div>
+
+      {/* Stock Counting Sessions */}
+      {stockSessions.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.25 }}
+          className="bg-dark-800/50 backdrop-blur-sm border border-dark-700/50 rounded-2xl p-6"
+        >
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <Package className="w-5 h-5 text-accent-teal" />
+              <h2 className="text-lg font-bold text-white">Contagens de Estoque Recentes</h2>
+            </div>
+            <Link to="/estoque/listas" className="text-primary-400 hover:text-primary-300 text-sm font-medium flex items-center gap-1">
+              Ver listas <ArrowRight className="w-4 h-4" />
+            </Link>
+          </div>
+          <div className="space-y-2">
+            {stockSessions.map(session => {
+              const started = new Date(session.started_at)
+              const ended = new Date(session.completed_at)
+              const diffMs = ended - started
+              const diffMin = Math.floor(diffMs / 60000)
+              const duration = diffMin < 60
+                ? `${diffMin}min`
+                : `${Math.floor(diffMin / 60)}h ${diffMin % 60}min`
+              const pct = session.items_total > 0 ? Math.round((session.items_filled / session.items_total) * 100) : 0
+              return (
+                <div key={session.id} className="flex items-center gap-3 p-3 bg-dark-700/30 rounded-xl">
+                  <div className="w-9 h-9 bg-accent-teal/10 rounded-lg flex items-center justify-center flex-shrink-0">
+                    <Package className="w-4 h-4 text-accent-teal" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-white truncate">{session.list_name}</p>
+                    <div className="flex items-center gap-2 text-xs text-dark-400 mt-0.5">
+                      <User className="w-3 h-3" />
+                      <span>{session.counted_by_name}</span>
+                      <span>·</span>
+                      <Timer className="w-3 h-3" />
+                      <span>{duration}</span>
+                    </div>
+                  </div>
+                  <div className="text-right flex-shrink-0">
+                    <p className={`text-sm font-bold ${pct === 100 ? 'text-emerald-400' : 'text-amber-400'}`}>{pct}%</p>
+                    <p className="text-xs text-dark-500">{session.items_filled}/{session.items_total} itens</p>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </motion.div>
+      )}
 
       {/* Main Content */}
       <div className="grid lg:grid-cols-3 gap-6">

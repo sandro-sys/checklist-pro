@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Plus, Trash2, Download, CheckCircle, AlertTriangle, Search, Package, Edit2, Save, X, ClipboardCheck, User, Sparkles, ListPlus, Check, Share2, Copy, ExternalLink, QrCode } from 'lucide-react'
+import { ArrowLeft, Plus, Trash2, Download, CheckCircle, AlertTriangle, Search, Package, Edit2, Save, X, ClipboardCheck, User, Sparkles, ListPlus, Check, Share2, Copy, ExternalLink, QrCode, RotateCcw } from 'lucide-react'
 import api from '../services/api'
 import toast from 'react-hot-toast'
 
@@ -465,6 +465,7 @@ export default function StockListEdit() {
   const [loading, setLoading] = useState(true)
   const [finalizing, setFinalizing] = useState(false)
   const [exporting, setExporting] = useState(false)
+  const [resetting, setResetting] = useState(false)
   const [showBulkAdd, setShowBulkAdd] = useState(false)
   const [showShare, setShowShare] = useState(false)
 
@@ -522,6 +523,25 @@ export default function StockListEdit() {
       toast.success(assignedTo ? 'Lista atribuída' : 'Atribuição removida')
     } catch {
       toast.error('Erro ao salvar atribuição')
+    }
+  }
+
+  const handleReset = async () => {
+    const itemsWithQty = items.filter(i => i.quantity !== null && i.quantity !== undefined)
+    if (itemsWithQty.length === 0) {
+      toast('A lista já está limpa.', { icon: 'ℹ️' })
+      return
+    }
+    if (!confirm(`Limpar lista e começar nova contagem?\n\n• Todas as quantidades, sabores e observações serão apagados\n• As métricas de contagens anteriores serão mantidas\n\nDeseja continuar?`)) return
+    setResetting(true)
+    try {
+      await api.post(`/stock/lists/${id}/reset-counting`)
+      setItems(prev => prev.map(i => ({ ...i, quantity: null, flavor: null, notes: null })))
+      toast.success('Lista limpa! Pronto para nova contagem.')
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Erro ao limpar lista')
+    } finally {
+      setResetting(false)
     }
   }
 
@@ -600,10 +620,17 @@ export default function StockListEdit() {
             <Download className="w-4 h-4" /> {exporting ? 'Exportando...' : 'Exportar TXT'}
           </button>
           {!finalized && items.length > 0 && (
-            <button onClick={() => navigate(`/estoque/listas/${id}/executar`)}
-              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-primary-500 to-accent-teal text-white font-semibold rounded-xl hover:shadow-lg hover:shadow-primary-500/25 transition-all text-sm">
-              <ClipboardCheck className="w-4 h-4" /> Iniciar Contagem
-            </button>
+            <>
+              <button onClick={handleReset} disabled={resetting}
+                className="flex items-center gap-2 px-3 py-2 bg-dark-800 border border-dark-700 text-amber-400 hover:text-amber-300 hover:border-amber-500/30 rounded-xl text-sm transition-colors disabled:opacity-50"
+                title="Zerar contagem e reiniciar (métricas são preservadas)">
+                <RotateCcw className="w-4 h-4" /> {resetting ? 'Limpando...' : 'Limpar e Recontar'}
+              </button>
+              <button onClick={() => navigate(`/estoque/listas/${id}/executar`)}
+                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-primary-500 to-accent-teal text-white font-semibold rounded-xl hover:shadow-lg hover:shadow-primary-500/25 transition-all text-sm">
+                <ClipboardCheck className="w-4 h-4" /> Iniciar Contagem
+              </button>
+            </>
           )}
           {!finalized && (
             <button onClick={handleFinalize} disabled={finalizing || items.length === 0}

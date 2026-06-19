@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { Mail, Lock, Eye, EyeOff, ArrowRight, Loader2 } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -11,11 +11,12 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const { login } = useAuthStore()
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    
+
     if (!email || !password) {
       toast.error('Preencha todos os campos')
       return
@@ -27,7 +28,8 @@ export default function Login() {
 
     if (result.success) {
       toast.success('Login realizado com sucesso!')
-      navigate('/dashboard')
+      const redirect = searchParams.get('redirect')
+      navigate(redirect || '/dashboard')
     } else {
       toast.error(result.error)
     }
