@@ -1,9 +1,85 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, FileText, CheckCircle, Clock, Download, Eye, X, ClipboardList, ClipboardCheck, User } from 'lucide-react'
+import { Plus, FileText, CheckCircle, Clock, Download, Eye, X, ClipboardList, ClipboardCheck, User, Share2, Copy, ExternalLink, QrCode } from 'lucide-react'
 import api from '../services/api'
 import { useAuthStore } from '../store/authStore'
 import toast from 'react-hot-toast'
+
+function StockShareModal({ list, onClose }) {
+  const shareUrl = `${window.location.origin}/contar/${list.id}`
+  const [qrCode, setQrCode] = useState(null)
+  const [loadingQr, setLoadingQr] = useState(true)
+  const [copied, setCopied] = useState(false)
+
+  useEffect(() => {
+    api.get(`/qrcode/stock/${list.id}`)
+      .then(({ data }) => setQrCode(data.qr_code))
+      .catch(() => {})
+      .finally(() => setLoadingQr(false))
+  }, [list.id])
+
+  const copyLink = () => {
+    navigator.clipboard.writeText(shareUrl)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+    toast.success('Link copiado!')
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-dark-800 border border-dark-700 rounded-2xl p-6 max-w-sm w-full" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Share2 className="w-5 h-5 text-primary-400" />
+            <h2 className="text-base font-bold text-white">Compartilhar Lista</h2>
+          </div>
+          <button onClick={onClose} className="p-1.5 text-dark-400 hover:text-white rounded-lg"><X className="w-5 h-5" /></button>
+        </div>
+
+        <p className="text-dark-400 text-sm mb-4 truncate">{list.name}</p>
+
+        {loadingQr ? (
+          <div className="bg-dark-700/50 rounded-xl p-8 mb-4 text-center">
+            <p className="text-dark-500 text-sm">Gerando QR Code...</p>
+          </div>
+        ) : qrCode ? (
+          <div className="bg-white p-3 rounded-xl mb-4">
+            <img src={qrCode} alt="QR Code" className="w-full aspect-square" />
+          </div>
+        ) : (
+          <div className="bg-dark-700/50 border border-dashed border-dark-600 rounded-xl p-6 mb-4 text-center">
+            <QrCode className="w-8 h-8 text-dark-500 mx-auto mb-2" />
+            <p className="text-dark-500 text-sm">QR Code indisponível</p>
+          </div>
+        )}
+
+        <div className="bg-dark-700 rounded-xl px-3 py-2.5 flex items-center gap-2 mb-3">
+          <span className="text-dark-300 text-xs flex-1 truncate">{shareUrl}</span>
+        </div>
+
+        <div className="space-y-2">
+          <div className="grid grid-cols-2 gap-2">
+            <button onClick={copyLink}
+              className="flex items-center justify-center gap-2 py-2.5 bg-dark-700 hover:bg-dark-600 text-white rounded-xl text-sm font-medium transition-colors">
+              <Copy className="w-4 h-4" /> {copied ? 'Copiado!' : 'Copiar Link'}
+            </button>
+            <button onClick={() => {
+              const text = encodeURIComponent(`Olá! Por favor, preencha a contagem de estoque "${list.name}":\n${shareUrl}`)
+              window.open(`https://wa.me/?text=${text}`, '_blank')
+            }}
+              className="flex items-center justify-center gap-2 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-sm font-medium transition-colors">
+              <Share2 className="w-4 h-4" /> WhatsApp
+            </button>
+          </div>
+          <a href={shareUrl} target="_blank" rel="noopener noreferrer"
+            className="flex items-center justify-center gap-2 w-full py-2.5 bg-dark-700 hover:bg-dark-600 text-white rounded-xl text-sm font-medium transition-colors">
+            <ExternalLink className="w-4 h-4" /> Abrir em nova aba
+          </a>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 const TYPE_LABELS = { contagem: 'Contagem', compras: 'Compras', inventario: 'Inventário' }
 const TYPE_COLORS = {
@@ -111,6 +187,7 @@ export default function StockLists() {
   const [users, setUsers] = useState([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
+  const [shareList, setShareList] = useState(null)
   const navigate = useNavigate()
   const { user } = useAuthStore()
 
@@ -177,6 +254,9 @@ export default function StockLists() {
           {list.notes && <p className="text-dark-400 text-xs mt-0.5 truncate">{list.notes}</p>}
         </div>
         <div className="flex gap-1 flex-shrink-0">
+          <button onClick={() => setShareList(list)} className="p-2 text-dark-400 hover:text-primary-400 hover:bg-primary-500/10 rounded-lg transition-colors" title="Compartilhar link de contagem">
+            <Share2 className="w-4 h-4" />
+          </button>
           <button onClick={() => handleExport(list)} className="p-2 text-dark-400 hover:text-primary-400 hover:bg-primary-500/10 rounded-lg transition-colors" title="Exportar TXT">
             <Download className="w-4 h-4" />
           </button>
@@ -281,6 +361,13 @@ export default function StockLists() {
           users={users}
           onClose={() => setShowModal(false)}
           onCreate={(list) => { setShowModal(false); navigate(`/estoque/listas/${list.id}`) }}
+        />
+      )}
+
+      {shareList && (
+        <StockShareModal
+          list={shareList}
+          onClose={() => setShareList(null)}
         />
       )}
     </div>

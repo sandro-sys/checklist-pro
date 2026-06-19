@@ -373,13 +373,33 @@ export default function Checklists() {
               </p>
 
               {/* QR Code Image */}
-              <div className="bg-white p-4 rounded-xl mb-4">
-                <img
-                  src={showQRModal.qr_code}
-                  alt="QR Code"
-                  className="w-full aspect-square"
-                />
-              </div>
+              {showQRModal.qr_code ? (
+                <div className="bg-white p-4 rounded-xl mb-4">
+                  <img
+                    src={showQRModal.qr_code}
+                    alt="QR Code"
+                    className="w-full aspect-square"
+                  />
+                </div>
+              ) : (
+                <div className="bg-dark-700/50 border border-dashed border-dark-600 rounded-xl p-8 mb-4 text-center">
+                  <QrCode className="w-10 h-10 text-dark-500 mx-auto mb-2" />
+                  <p className="text-dark-400 text-sm mb-3">QR Code não gerado</p>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        const { data } = await api.post(`/checklists/${showQRModal.id}/regenerate-qrcode`)
+                        setShowQRModal(prev => ({ ...prev, qr_code: data.qr_code }))
+                        toast.success('QR Code gerado!')
+                      } catch { toast.error('Erro ao gerar QR Code') }
+                    }}
+                    className="text-primary-400 hover:text-primary-300 text-sm font-medium transition-colors"
+                  >
+                    Gerar QR Code
+                  </button>
+                </div>
+              )}
 
               {/* Shareable Link */}
               <div className="mb-6">
@@ -405,33 +425,38 @@ export default function Checklists() {
               </div>
 
               {/* Actions */}
-              <div className="grid grid-cols-2 gap-3 mb-3">
-                <button
-                  onClick={() => handleDownloadQR(showQRModal)}
-                  className="flex items-center justify-center gap-2 py-3 bg-primary-500 hover:bg-primary-600 text-white rounded-xl transition-colors font-medium"
+              <div className="space-y-2">
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => handleDownloadQR(showQRModal)}
+                    disabled={!showQRModal.qr_code}
+                    className="flex items-center justify-center gap-2 py-2.5 bg-primary-500 hover:bg-primary-600 text-white rounded-xl transition-colors font-medium text-sm disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    <Download className="w-4 h-4" />
+                    Baixar QR
+                  </button>
+                  <button
+                    onClick={() => {
+                      const url = getExecuteLink(showQRModal.id)
+                      const text = encodeURIComponent(`Execute o checklist "${showQRModal.title}":\n${url}`)
+                      window.open(`https://wa.me/?text=${text}`, '_blank')
+                    }}
+                    className="flex items-center justify-center gap-2 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl transition-colors font-medium text-sm"
+                  >
+                    <Share2 className="w-4 h-4" />
+                    WhatsApp
+                  </button>
+                </div>
+                <a
+                  href={getExecuteLink(showQRModal.id)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center gap-2 w-full py-2.5 bg-dark-700 hover:bg-dark-600 text-white rounded-xl transition-colors font-medium text-sm"
                 >
-                  <Download className="w-5 h-5" />
-                  Baixar QR
-                </button>
-                <button
-                  onClick={() => shareLink(showQRModal)}
-                  className="flex items-center justify-center gap-2 py-3 bg-accent-teal hover:bg-teal-500 text-white rounded-xl transition-colors font-medium"
-                >
-                  <Share2 className="w-5 h-5" />
-                  Compartilhar
-                </button>
+                  <ExternalLink className="w-4 h-4" />
+                  Abrir em nova aba
+                </a>
               </div>
-
-              {/* Open Link */}
-              <a
-                href={getExecuteLink(showQRModal.id)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center justify-center gap-2 w-full py-3 bg-dark-700 hover:bg-dark-600 text-white rounded-xl transition-colors font-medium"
-              >
-                <ExternalLink className="w-5 h-5" />
-                Abrir em nova aba
-              </a>
             </motion.div>
           </motion.div>
         )}
