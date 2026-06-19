@@ -30,7 +30,9 @@ import {
   Target,
   ArrowRight,
   Lock,
-  Unlock
+  Unlock,
+  Package,
+  ClipboardList
 } from 'lucide-react'
 import api from '../services/api'
 import { useAuthStore } from '../store/authStore'
@@ -70,7 +72,7 @@ export default function AdminDashboard() {
   const [companyMetrics, setCompanyMetrics] = useState(null)
   const [loadingMetrics, setLoadingMetrics] = useState(false)
   
-  // Copy checklists state
+  // Copy tab state
   const [allChecklists, setAllChecklists] = useState([])
   const [checklistSearch, setChecklistSearch] = useState('')
   const [selectedChecklist, setSelectedChecklist] = useState(null)
@@ -78,6 +80,9 @@ export default function AdminDashboard() {
   const [sourceCompanyChecklists, setSourceCompanyChecklists] = useState([])
   const [targetCompanyId, setTargetCompanyId] = useState('')
   const [copying, setCopying] = useState(false)
+  const [copyType, setCopyType] = useState('checklist') // 'checklist' | 'product' | 'stock_list'
+  const [sourceItems, setSourceItems] = useState([]) // produtos ou listas da empresa de origem
+  const [selectedItem, setSelectedItem] = useState(null) // id do item a copiar
   
   // Support messages state
   const [supportConversations, setSupportConversations] = useState([])
@@ -105,6 +110,12 @@ export default function AdminDashboard() {
     } else if (activeTab === 'copy') {
       fetchAllChecklists()
       fetchCompanies()
+      setSourceCompanyId('')
+      setTargetCompanyId('')
+      setSelectedChecklist(null)
+      setSelectedItem(null)
+      setSourceItems([])
+      setCopyType('checklist')
     } else if (activeTab === 'support') {
       fetchSupportConversations()
     }
@@ -219,11 +230,58 @@ export default function AdminDashboard() {
     }
   }
 
+  const fetchSourceItems = async (companyId, type) => {
+    if (!companyId) { setSourceItems([]); return }
+    try {
+      if (type === 'product') {
+        const { data } = await api.get(`/admin/companies/${companyId}/products`)
+        setSourceItems(data.products || [])
+      } else if (type === 'stock_list') {
+        const { data } = await api.get(`/admin/companies/${companyId}/stock-lists`)
+        setSourceItems(data.lists || [])
+      }
+    } catch { setSourceItems([]) }
+  }
+
   // Quando selecionar empresa de origem, buscar seus checklists
   const handleSelectSourceCompany = (companyId) => {
     setSourceCompanyId(companyId)
-    setSelectedChecklist(null) // Limpar checklist selecionado
+    setSelectedChecklist(null)
+    setSelectedItem(null)
     fetchSourceCompanyChecklists(companyId)
+    fetchSourceItems(companyId, copyType)
+  }
+
+  const handleChangeCopyType = (type) => {
+    setCopyType(type)
+    setSelectedChecklist(null)
+    setSelectedItem(null)
+    setSourceItems([])
+    if (sourceCompanyId) {
+      if (type === 'checklist') fetchSourceCompanyChecklists(sourceCompanyId)
+      else fetchSourceItems(sourceCompanyId, type)
+    }
+  }
+
+  const copyItem = async () => {
+    if (!selectedItem || !targetCompanyId) {
+      toast.error('Selecione um item e uma empresa de destino'); return
+    }
+    try {
+      setCopying(true)
+      let response
+      if (copyType === 'product') {
+        response = await api.post(`/admin/products/${selectedItem}/copy`, { target_company_id: targetCompanyId })
+      } else {
+        response = await api.post(`/admin/stock-lists/${selectedItem}/copy`, { target_company_id: targetCompanyId })
+      }
+      toast.success(response.data.message)
+      setSelectedItem(null)
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'Erro ao copiar')
+    } finally {
+      setCopying(false)
+    }
   }
 
   const copyChecklist = async () => {
@@ -404,7 +462,7 @@ export default function AdminDashboard() {
             { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
             { id: 'companies', label: 'Empresas', icon: Building2 },
             { id: 'users', label: 'Usuários', icon: Users },
-            { id: 'copy', label: 'Copiar Checklists', icon: Copy },
+            { id: 'copy', label: 'Copiar Conteúdo', icon: Copy },
             { id: 'support', label: 'Suporte', icon: Headphones },
             { id: 'messages', label: 'Contato', icon: MessageSquare }
           ].map(tab => (
@@ -895,14 +953,36 @@ export default function AdminDashboard() {
           </motion.div>
         )}
 
-        {/* Copy Checklists Tab */}
+        {/* Copy Content Tab */}
         {activeTab === 'copy' && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
           >
-            {/* Resumo da Cópia */}
-            {selectedChecklist && targetCompanyId && (
+            {/* Seletor de tipo */}
+            <div className="flex gap-2 mb-6">
+              {[
+                { id: 'checklist', label: 'Checklists', icon: ClipboardCheck },
+                { id: 'product', label: 'Produtos', icon: Package },
+                { id: 'stock_list', label: 'Listas de Estoque', icon: ClipboardList },
+              ].map(({ id, label, icon: Icon }) => (
+                <button
+                  key={id}
+                  onClick={() => handleChangeCopyType(id)}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-xl font-medium transition-all ${
+                    copyType === id
+                      ? 'bg-primary-500 text-white'
+                      : 'bg-dark-800 text-dark-400 hover:text-white hover:bg-dark-700'
+                  }`}
+                >
+                  <Icon className="w-4 h-4" />
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {/* Resumo da Cópia — checklist */}
+            {copyType === 'checklist' && selectedChecklist && targetCompanyId && (
               <div className="mb-6 p-4 bg-dark-800/80 border border-primary-500/30 rounded-2xl">
                 <h4 className="text-white font-medium mb-3 flex items-center gap-2">
                   <Copy className="w-5 h-5 text-primary-400" />
@@ -911,25 +991,15 @@ export default function AdminDashboard() {
                 <div className="flex items-center gap-4 text-sm">
                   <div className="flex-1 p-3 bg-dark-700/50 rounded-xl">
                     <p className="text-dark-400 text-xs mb-1">EMPRESA DE ORIGEM</p>
-                    <p className="text-orange-400 font-medium">
-                      {companies.find(c => c.id === sourceCompanyId)?.name || '-'}
-                    </p>
-                    <p className="text-white text-sm mt-1">
-                      {sourceCompanyChecklists.find(c => c.id === selectedChecklist)?.title || '-'}
-                    </p>
-                    <p className="text-dark-500 text-xs">
-                      {sourceCompanyChecklists.find(c => c.id === selectedChecklist)?.items_count || 0} itens
-                    </p>
+                    <p className="text-orange-400 font-medium">{companies.find(c => c.id === sourceCompanyId)?.name || '-'}</p>
+                    <p className="text-white text-sm mt-1">{sourceCompanyChecklists.find(c => c.id === selectedChecklist)?.title || '-'}</p>
+                    <p className="text-dark-500 text-xs">{sourceCompanyChecklists.find(c => c.id === selectedChecklist)?.items_count || 0} itens</p>
                   </div>
                   <ArrowRight className="w-8 h-8 text-primary-400 flex-shrink-0" />
                   <div className="flex-1 p-3 bg-dark-700/50 rounded-xl">
                     <p className="text-dark-400 text-xs mb-1">EMPRESA DE DESTINO</p>
-                    <p className="text-green-400 font-medium">
-                      {companies.find(c => c.id === targetCompanyId)?.name || '-'}
-                    </p>
-                    <p className="text-dark-500 text-sm mt-1">
-                      {companies.find(c => c.id === targetCompanyId)?.owner_email || '-'}
-                    </p>
+                    <p className="text-green-400 font-medium">{companies.find(c => c.id === targetCompanyId)?.name || '-'}</p>
+                    <p className="text-dark-500 text-sm mt-1">{companies.find(c => c.id === targetCompanyId)?.owner_email || '-'}</p>
                   </div>
                 </div>
                 <button
@@ -937,24 +1007,53 @@ export default function AdminDashboard() {
                   disabled={copying}
                   className="mt-4 w-full flex items-center justify-center gap-2 py-3 bg-primary-500 text-white rounded-xl font-medium hover:bg-primary-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {copying ? (
-                    <RefreshCw className="w-5 h-5 animate-spin" />
-                  ) : (
-                    <Copy className="w-5 h-5" />
-                  )}
+                  {copying ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Copy className="w-5 h-5" />}
+                  {copying ? 'Copiando...' : 'Confirmar Cópia'}
+                </button>
+              </div>
+            )}
+
+            {/* Resumo da Cópia — produto ou lista */}
+            {copyType !== 'checklist' && selectedItem && targetCompanyId && (
+              <div className="mb-6 p-4 bg-dark-800/80 border border-primary-500/30 rounded-2xl">
+                <h4 className="text-white font-medium mb-3 flex items-center gap-2">
+                  <Copy className="w-5 h-5 text-primary-400" />
+                  Resumo da Cópia
+                </h4>
+                <div className="flex items-center gap-4 text-sm">
+                  <div className="flex-1 p-3 bg-dark-700/50 rounded-xl">
+                    <p className="text-dark-400 text-xs mb-1">EMPRESA DE ORIGEM</p>
+                    <p className="text-orange-400 font-medium">{companies.find(c => c.id === sourceCompanyId)?.name || '-'}</p>
+                    <p className="text-white text-sm mt-1">
+                      {copyType === 'product'
+                        ? sourceItems.find(i => i.id === selectedItem)?.name
+                        : sourceItems.find(i => i.id === selectedItem)?.name}
+                    </p>
+                  </div>
+                  <ArrowRight className="w-8 h-8 text-primary-400 flex-shrink-0" />
+                  <div className="flex-1 p-3 bg-dark-700/50 rounded-xl">
+                    <p className="text-dark-400 text-xs mb-1">EMPRESA DE DESTINO</p>
+                    <p className="text-green-400 font-medium">{companies.find(c => c.id === targetCompanyId)?.name || '-'}</p>
+                  </div>
+                </div>
+                <button
+                  onClick={copyItem}
+                  disabled={copying}
+                  className="mt-4 w-full flex items-center justify-center gap-2 py-3 bg-primary-500 text-white rounded-xl font-medium hover:bg-primary-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {copying ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Copy className="w-5 h-5" />}
                   {copying ? 'Copiando...' : 'Confirmar Cópia'}
                 </button>
               </div>
             )}
 
             <div className="grid md:grid-cols-3 gap-6">
-              {/* 1. Selecionar Empresa de Origem */}
+              {/* 1. Empresa de Origem */}
               <div className="bg-dark-800/50 border border-dark-700/50 rounded-2xl p-6">
                 <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
                   <Building2 className="w-5 h-5 text-orange-400" />
                   <span className="text-orange-400">1.</span> Empresa de Origem
                 </h3>
-                
                 <div className="space-y-2 max-h-96 overflow-y-auto">
                   {companies.map(company => (
                     <div
@@ -968,79 +1067,100 @@ export default function AdminDashboard() {
                     >
                       <p className="font-medium text-white">{company.name}</p>
                       <p className="text-sm text-dark-400">{company.owner_email}</p>
-                      <p className="text-xs text-dark-500">{company.checklists_count || 0} checklists</p>
                     </div>
                   ))}
                 </div>
               </div>
 
-              {/* 2. Selecionar Checklist */}
+              {/* 2. Selecionar item */}
               <div className="bg-dark-800/50 border border-dark-700/50 rounded-2xl p-6">
                 <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-                  <ClipboardCheck className="w-5 h-5 text-yellow-400" />
-                  <span className="text-yellow-400">2.</span> Selecionar Checklist
+                  {copyType === 'checklist' && <ClipboardCheck className="w-5 h-5 text-yellow-400" />}
+                  {copyType === 'product' && <Package className="w-5 h-5 text-yellow-400" />}
+                  {copyType === 'stock_list' && <ClipboardList className="w-5 h-5 text-yellow-400" />}
+                  <span className="text-yellow-400">2.</span>{' '}
+                  {copyType === 'checklist' ? 'Selecionar Checklist' : copyType === 'product' ? 'Selecionar Produto' : 'Selecionar Lista'}
                 </h3>
-                
                 {!sourceCompanyId ? (
                   <div className="text-center py-12 text-dark-400">
-                    <ClipboardCheck className="w-12 h-12 mx-auto mb-3 opacity-30" />
+                    <Building2 className="w-12 h-12 mx-auto mb-3 opacity-30" />
                     <p>Selecione uma empresa de origem primeiro</p>
                   </div>
-                ) : sourceCompanyChecklists.length === 0 ? (
+                ) : copyType === 'checklist' ? (
+                  sourceCompanyChecklists.length === 0 ? (
+                    <div className="text-center py-12 text-dark-400">
+                      <ClipboardCheck className="w-12 h-12 mx-auto mb-3 opacity-30" />
+                      <p>Sem checklists</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2 max-h-96 overflow-y-auto">
+                      {sourceCompanyChecklists.map(c => (
+                        <div
+                          key={c.id}
+                          onClick={() => setSelectedChecklist(c.id)}
+                          className={`p-3 rounded-xl cursor-pointer transition-all ${
+                            selectedChecklist === c.id
+                              ? 'bg-yellow-500/20 border-2 border-yellow-500'
+                              : 'bg-dark-700/50 border border-transparent hover:bg-dark-700'
+                          }`}
+                        >
+                          <p className="font-medium text-white">{c.title}</p>
+                          <p className="text-xs text-dark-500">{c.items_count || 0} itens</p>
+                        </div>
+                      ))}
+                    </div>
+                  )
+                ) : sourceItems.length === 0 ? (
                   <div className="text-center py-12 text-dark-400">
-                    <ClipboardCheck className="w-12 h-12 mx-auto mb-3 opacity-30" />
-                    <p>Esta empresa não possui checklists</p>
+                    <Package className="w-12 h-12 mx-auto mb-3 opacity-30" />
+                    <p>Sem {copyType === 'product' ? 'produtos' : 'listas'}</p>
                   </div>
                 ) : (
                   <div className="space-y-2 max-h-96 overflow-y-auto">
-                    {sourceCompanyChecklists.map(checklist => (
+                    {sourceItems.map(item => (
                       <div
-                        key={checklist.id}
-                        onClick={() => setSelectedChecklist(checklist.id)}
+                        key={item.id}
+                        onClick={() => setSelectedItem(item.id)}
                         className={`p-3 rounded-xl cursor-pointer transition-all ${
-                          selectedChecklist === checklist.id
+                          selectedItem === item.id
                             ? 'bg-yellow-500/20 border-2 border-yellow-500'
                             : 'bg-dark-700/50 border border-transparent hover:bg-dark-700'
                         }`}
                       >
-                        <p className="font-medium text-white">{checklist.title}</p>
-                        <p className="text-xs text-dark-500">{checklist.items_count || 0} itens</p>
+                        <p className="font-medium text-white">{item.name}</p>
+                        {copyType === 'product' && <p className="text-xs text-dark-500">{item.unit} · {item.category}</p>}
+                        {copyType === 'stock_list' && <p className="text-xs text-dark-500">{item.type} · {item.items_count || 0} itens</p>}
                       </div>
                     ))}
                   </div>
                 )}
               </div>
 
-              {/* 3. Selecionar Empresa de Destino */}
+              {/* 3. Empresa de Destino */}
               <div className="bg-dark-800/50 border border-dark-700/50 rounded-2xl p-6">
                 <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
                   <Building2 className="w-5 h-5 text-green-400" />
                   <span className="text-green-400">3.</span> Empresa de Destino
                 </h3>
-                
-                <div className="space-y-2 max-h-96 overflow-y-auto">
-                  {companies
-                    .filter(c => c.id !== sourceCompanyId) // Não mostrar a empresa de origem
-                    .map(company => (
-                    <div
-                      key={company.id}
-                      onClick={() => setTargetCompanyId(company.id)}
-                      className={`p-3 rounded-xl cursor-pointer transition-all ${
-                        targetCompanyId === company.id
-                          ? 'bg-green-500/20 border-2 border-green-500'
-                          : 'bg-dark-700/50 border border-transparent hover:bg-dark-700'
-                      }`}
-                    >
-                      <p className="font-medium text-white">{company.name}</p>
-                      <p className="text-sm text-dark-400">{company.owner_email}</p>
-                    </div>
-                  ))}
-                </div>
-
-                {!sourceCompanyId && (
-                  <p className="text-dark-400 text-center text-sm py-4">
-                    Selecione uma empresa de origem primeiro
-                  </p>
+                {!sourceCompanyId ? (
+                  <p className="text-dark-400 text-center text-sm py-12">Selecione uma empresa de origem primeiro</p>
+                ) : (
+                  <div className="space-y-2 max-h-96 overflow-y-auto">
+                    {companies.filter(c => c.id !== sourceCompanyId).map(company => (
+                      <div
+                        key={company.id}
+                        onClick={() => setTargetCompanyId(company.id)}
+                        className={`p-3 rounded-xl cursor-pointer transition-all ${
+                          targetCompanyId === company.id
+                            ? 'bg-green-500/20 border-2 border-green-500'
+                            : 'bg-dark-700/50 border border-transparent hover:bg-dark-700'
+                        }`}
+                      >
+                        <p className="font-medium text-white">{company.name}</p>
+                        <p className="text-sm text-dark-400">{company.owner_email}</p>
+                      </div>
+                    ))}
+                  </div>
                 )}
               </div>
             </div>

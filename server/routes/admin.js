@@ -756,6 +756,113 @@ router.post('/checklists/:checklistId/copy', async (req, res) => {
 });
 
 // ==========================================
+// COPIAR PRODUTOS E LISTAS ENTRE EMPRESAS
+// ==========================================
+
+// Listar produtos ativos de uma empresa
+router.get('/companies/:companyId/products', async (req, res) => {
+  try {
+    const { companyId } = req.params;
+    const products = await dbAllAsync(
+      `SELECT id, name, unit, category, has_flavor FROM products WHERE company_id = ? AND is_active = 1 ORDER BY name ASC`,
+      [companyId]
+    );
+    res.json({ products });
+  } catch (error) {
+    console.error('Erro ao listar produtos:', error);
+    res.status(500).json({ error: 'Erro ao listar produtos' });
+  }
+});
+
+// Copiar produto para outra empresa
+router.post('/products/:productId/copy', async (req, res) => {
+  try {
+    const { productId } = req.params;
+    const { target_company_id } = req.body;
+    if (!target_company_id) return res.status(400).json({ error: 'Empresa de destino é obrigatória' });
+
+    const { v4: uuidv4 } = await import('uuid');
+    const original = await dbGetAsync(`SELECT * FROM products WHERE id = ?`, [productId]);
+    if (!original) return res.status(404).json({ error: 'Produto não encontrado' });
+
+    const existing = await dbGetAsync(
+      `SELECT id FROM products WHERE company_id = ? AND name = ? AND is_active = 1`,
+      [target_company_id, original.name]
+    );
+
+    const newId = uuidv4();
+    const now = new Date().toISOString();
+    const newName = existing ? `${original.name} (Cópia)` : original.name;
+
+    await dbRunAsync(
+      `INSERT INTO products (id, company_id, name, unit, current_stock, min_stock, category, has_flavor, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, 0, ?, ?, ?, 1, ?, ?)`,
+      [newId, target_company_id, newName, original.unit, original.min_stock || 0, original.category || 'Outros', original.has_flavor || 0, now, now]
+    );
+
+    const targetCompany = await dbGetAsync(`SELECT name FROM companies WHERE id = ?`, [target_company_id]);
+    res.json({ success: true, message: `Produto "${newName}" copiado para "${targetCompany?.name}"` });
+  } catch (error) {
+    console.error('Erro ao copiar produto:', error);
+    res.status(500).json({ error: 'Erro ao copiar produto' });
+  }
+});
+
+// Listar listas de estoque de uma empresa
+router.get('/companies/:companyId/stock-lists', async (req, res) => {
+  try {
+    const { companyId } = req.params;
+    const lists = await dbAllAsync(
+      `SELECT sl.id, sl.name, sl.type, sl.status, COUNT(sli.id) as items_count
+       FROM stock_lists sl
+       LEFT JOIN stock_list_items sli ON sli.list_id = sl.id
+       WHERE sl.company_id = ?
+       GROUP BY sl.id
+       ORDER BY sl.created_at DESC`,
+      [companyId]
+    );
+    res.json({ lists });
+  } catch (error) {
+    console.error('Erro ao listar listas:', error);
+    res.status(500).json({ error: 'Erro ao listar listas' });
+  }
+});
+
+// Copiar lista de estoque para outra empresa (itens sem quantidades)
+router.post('/stock-lists/:listId/copy', async (req, res) => {
+  try {
+    const { listId } = req.params;
+    const { target_company_id } = req.body;
+    if (!target_company_id) return res.status(400).json({ error: 'Empresa de destino é obrigatória' });
+
+    const { v4: uuidv4 } = await import('uuid');
+    const original = await dbGetAsync(`SELECT * FROM stock_lists WHERE id = ?`, [listId]);
+    if (!original) return res.status(404).json({ error: 'Lista não encontrada' });
+
+    const items = await dbAllAsync(`SELECT * FROM stock_list_items WHERE list_id = ? ORDER BY order_index ASC`, [listId]);
+
+    const newId = uuidv4();
+    const now = new Date().toISOString();
+    await dbRunAsync(
+      `INSERT INTO stock_lists (id, company_id, name, type, status, notes, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, 'editing', ?, ?, ?, ?)`,
+      [newId, target_company_id, `${original.name} (Cópia)`, original.type, original.notes || null, req.user.id, now, now]
+    );
+
+    for (const item of items) {
+      await dbRunAsync(
+        `INSERT INTO stock_list_items (id, list_id, name, unit, quantity, order_index, created_at) VALUES (?, ?, ?, ?, NULL, ?, ?)`,
+        [uuidv4(), newId, item.name, item.unit || 'UN', item.order_index, now]
+      );
+    }
+
+    const targetCompany = await dbGetAsync(`SELECT name FROM companies WHERE id = ?`, [target_company_id]);
+    res.json({ success: true, message: `Lista "${original.name}" copiada para "${targetCompany?.name}" com ${items.length} itens` });
+  } catch (error) {
+    console.error('Erro ao copiar lista:', error);
+    res.status(500).json({ error: 'Erro ao copiar lista' });
+  }
+});
+
+// ==========================================
 // SISTEMA DE MENSAGENS DE SUPORTE
 // ==========================================
 
