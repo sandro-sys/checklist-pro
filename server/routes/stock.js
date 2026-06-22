@@ -195,7 +195,23 @@ router.get('/lists', async (req, res) => {
        ORDER BY sl.created_at DESC`,
       [req.user.company_id]
     );
-    res.json(lists);
+    const companyUsers = await dbAllAsync(`SELECT id, name FROM users WHERE company_id = ?`, [req.user.company_id]);
+    const userMap = Object.fromEntries(companyUsers.map(u => [u.id, u.name]));
+    const processed = lists.map(list => {
+      let assigned_to_ids = [];
+      let assigned_to_names = [];
+      if (list.assigned_to_ids) {
+        try {
+          assigned_to_ids = JSON.parse(list.assigned_to_ids);
+          assigned_to_names = assigned_to_ids.map(id => userMap[id]).filter(Boolean);
+        } catch {}
+      } else if (list.assigned_to) {
+        assigned_to_ids = [list.assigned_to];
+        assigned_to_names = list.assigned_to_name ? [list.assigned_to_name] : [];
+      }
+      return { ...list, assigned_to_ids, assigned_to_names };
+    });
+    res.json(processed);
   } catch (e) {
     console.error('Erro ao listar listas:', e);
     res.status(500).json({ error: 'Erro ao listar listas' });
@@ -247,15 +263,16 @@ router.post('/lists/import-txt', async (req, res) => {
 router.post('/lists', async (req, res) => {
   if (!guardCompany(req, res)) return;
   try {
-    const { name, type, notes, assigned_to } = req.body;
+    const { name, type, notes, assigned_to_ids } = req.body;
     if (!name || !type) return res.status(400).json({ error: 'Nome e tipo são obrigatórios' });
     if (!['contagem', 'compras', 'inventario'].includes(type))
       return res.status(400).json({ error: 'Tipo inválido. Use: contagem, compras ou inventario' });
 
+    const ids = Array.isArray(assigned_to_ids) ? assigned_to_ids : [];
     const id = uuidv4();
     await dbRunAsync(
-      `INSERT INTO stock_lists (id, company_id, name, type, status, notes, created_by, assigned_to) VALUES (?, ?, ?, ?, 'editing', ?, ?, ?)`,
-      [id, req.user.company_id, name.toUpperCase().trim(), type, notes || null, req.user.id, assigned_to || null]
+      `INSERT INTO stock_lists (id, company_id, name, type, status, notes, created_by, assigned_to, assigned_to_ids) VALUES (?, ?, ?, ?, 'editing', ?, ?, ?, ?)`,
+      [id, req.user.company_id, name.toUpperCase().trim(), type, notes || null, req.user.id, ids[0] || null, ids.length ? JSON.stringify(ids) : null]
     );
     res.status(201).json({ message: 'Lista criada', list: await dbGetAsync(`SELECT * FROM stock_lists WHERE id = ?`, [id]) });
   } catch (e) {
@@ -278,6 +295,21 @@ router.get('/lists/:id', async (req, res) => {
     );
     if (!list) return res.status(404).json({ error: 'Lista não encontrada' });
 
+    // Resolve multiple assignees
+    const companyUsers = await dbAllAsync(`SELECT id, name FROM users WHERE company_id = ?`, [req.user.company_id]);
+    const userMap = Object.fromEntries(companyUsers.map(u => [u.id, u.name]));
+    let assigned_to_ids = [];
+    let assigned_to_names = [];
+    if (list.assigned_to_ids) {
+      try {
+        assigned_to_ids = JSON.parse(list.assigned_to_ids);
+        assigned_to_names = assigned_to_ids.map(id => userMap[id]).filter(Boolean);
+      } catch {}
+    } else if (list.assigned_to) {
+      assigned_to_ids = [list.assigned_to];
+      assigned_to_names = list.assigned_to_name ? [list.assigned_to_name] : [];
+    }
+
     const items = await dbAllAsync(
       `SELECT sli.*, p.current_stock as product_current_stock, p.min_stock as product_min_stock, p.has_flavor as product_has_flavor
        FROM stock_list_items sli
@@ -286,7 +318,7 @@ router.get('/lists/:id', async (req, res) => {
        ORDER BY sli.order_index ASC, sli.created_at ASC`,
       [id]
     );
-    res.json({ ...list, items });
+    res.json({ ...list, assigned_to_ids, assigned_to_names, items });
   } catch (e) {
     console.error('Erro ao obter lista:', e);
     res.status(500).json({ error: 'Erro ao obter lista' });
@@ -297,17 +329,27 @@ router.put('/lists/:id', async (req, res) => {
   if (!guardCompany(req, res)) return;
   try {
     const { id } = req.params;
-    const { name, notes, assigned_to } = req.body;
+    const { name, notes, assigned_to_ids } = req.body;
     const list = await dbGetAsync(`SELECT * FROM stock_lists WHERE id = ? AND company_id = ?`, [id, req.user.company_id]);
     if (!list) return res.status(404).json({ error: 'Lista não encontrada' });
-    if (list.status === 'finalizada') return res.status(400).json({ error: 'Lista finalizada não pode ser editada' });
+
+    let newIds, newIdsJson, primaryId;
+    if (assigned_to_ids !== undefined) {
+      newIds = Array.isArray(assigned_to_ids) ? assigned_to_ids : [];
+      newIdsJson = newIds.length ? JSON.stringify(newIds) : null;
+      primaryId = newIds[0] || null;
+    } else {
+      newIdsJson = list.assigned_to_ids;
+      primaryId = list.assigned_to;
+    }
 
     await dbRunAsync(
-      `UPDATE stock_lists SET name = ?, notes = ?, assigned_to = ?, updated_at = ? WHERE id = ?`,
+      `UPDATE stock_lists SET name = ?, notes = ?, assigned_to = ?, assigned_to_ids = ?, updated_at = ? WHERE id = ?`,
       [
         name ? name.toUpperCase().trim() : list.name,
         notes !== undefined ? notes : list.notes,
-        assigned_to !== undefined ? (assigned_to || null) : list.assigned_to,
+        primaryId,
+        newIdsJson,
         new Date().toISOString(),
         id
       ]
@@ -329,7 +371,6 @@ router.post('/lists/:id/items', async (req, res) => {
 
     const list = await dbGetAsync(`SELECT * FROM stock_lists WHERE id = ? AND company_id = ?`, [id, req.user.company_id]);
     if (!list) return res.status(404).json({ error: 'Lista não encontrada' });
-    if (list.status === 'finalizada') return res.status(400).json({ error: 'Lista finalizada não pode ser editada' });
     if (!name) return res.status(400).json({ error: 'Nome do item é obrigatório' });
 
     const maxOrder = await dbGetAsync(`SELECT MAX(order_index) as max_idx FROM stock_list_items WHERE list_id = ?`, [id]);
@@ -356,7 +397,6 @@ router.put('/lists/:id/items/:itemId', async (req, res) => {
 
     const list = await dbGetAsync(`SELECT status FROM stock_lists WHERE id = ? AND company_id = ?`, [id, req.user.company_id]);
     if (!list) return res.status(404).json({ error: 'Lista não encontrada' });
-    if (list.status === 'finalizada') return res.status(400).json({ error: 'Lista finalizada não pode ser editada' });
 
     const item = await dbGetAsync(`SELECT * FROM stock_list_items WHERE id = ? AND list_id = ?`, [itemId, id]);
     if (!item) return res.status(404).json({ error: 'Item não encontrado' });
@@ -385,12 +425,29 @@ router.delete('/lists/:id/items/:itemId', async (req, res) => {
     const { id, itemId } = req.params;
     const list = await dbGetAsync(`SELECT status FROM stock_lists WHERE id = ? AND company_id = ?`, [id, req.user.company_id]);
     if (!list) return res.status(404).json({ error: 'Lista não encontrada' });
-    if (list.status === 'finalizada') return res.status(400).json({ error: 'Lista finalizada não pode ser editada' });
     await dbRunAsync(`DELETE FROM stock_list_items WHERE id = ? AND list_id = ?`, [itemId, id]);
     res.json({ message: 'Item removido' });
   } catch (e) {
     console.error('Erro ao remover item:', e);
     res.status(500).json({ error: 'Erro ao remover item' });
+  }
+});
+
+// Excluir lista
+router.delete('/lists/:id', async (req, res) => {
+  if (!guardCompany(req, res)) return;
+  try {
+    const { id } = req.params;
+    const list = await dbGetAsync(`SELECT id FROM stock_lists WHERE id = ? AND company_id = ?`, [id, req.user.company_id]);
+    if (!list) return res.status(404).json({ error: 'Lista não encontrada' });
+    await dbRunAsync(`DELETE FROM stock_list_items WHERE list_id = ?`, [id]);
+    await dbRunAsync(`DELETE FROM stock_counting_sessions WHERE list_id = ?`, [id]);
+    await dbRunAsync(`DELETE FROM stock_movements WHERE list_id = ?`, [id]);
+    await dbRunAsync(`DELETE FROM stock_lists WHERE id = ?`, [id]);
+    res.json({ message: 'Lista excluída' });
+  } catch (e) {
+    console.error('Erro ao excluir lista:', e);
+    res.status(500).json({ error: 'Erro ao excluir lista' });
   }
 });
 
@@ -538,8 +595,8 @@ router.post('/lists/:id/copy', async (req, res) => {
     const newId = uuidv4();
     const now = new Date().toISOString();
     await dbRunAsync(
-      `INSERT INTO stock_lists (id, company_id, name, type, status, notes, created_by, assigned_to, created_at, updated_at) VALUES (?, ?, ?, ?, 'editing', ?, ?, ?, ?, ?)`,
-      [newId, req.user.company_id, `${original.name} (CÓPIA)`, original.type, original.notes || null, req.user.id, original.assigned_to || null, now, now]
+      `INSERT INTO stock_lists (id, company_id, name, type, status, notes, created_by, assigned_to, assigned_to_ids, created_at, updated_at) VALUES (?, ?, ?, ?, 'editing', ?, ?, ?, ?, ?, ?)`,
+      [newId, req.user.company_id, `${original.name} (CÓPIA)`, original.type, original.notes || null, req.user.id, original.assigned_to || null, original.assigned_to_ids || null, now, now]
     );
 
     for (const item of items) {
@@ -569,7 +626,6 @@ router.post('/lists/:id/start-counting', async (req, res) => {
       [id, req.user.company_id]
     );
     if (!list) return res.status(404).json({ error: 'Lista não encontrada' });
-    if (list.status === 'finalizada') return res.status(400).json({ error: 'Lista já finalizada' });
 
     // Verifica se já existe sessão ativa para este usuário nesta lista
     let session = await dbGetAsync(
@@ -633,7 +689,6 @@ router.post('/lists/:id/reset-counting', async (req, res) => {
       [id, req.user.company_id]
     );
     if (!list) return res.status(404).json({ error: 'Lista não encontrada' });
-    if (list.status === 'finalizada') return res.status(400).json({ error: 'Lista finalizada — não pode recontar' });
 
     // Encerra sessão ativa sem completed_at (abandonada)
     await dbRunAsync(

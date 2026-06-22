@@ -186,6 +186,8 @@ export default function StockListPublicExecute() {
   const [completing, setCompleting] = useState(false)
   const [completed, setCompleted] = useState(false)
   const [completedSession, setCompletedSession] = useState(null)
+  const [fullText, setFullText] = useState(null)
+  const [copied, setCopied] = useState(false)
 
   useEffect(() => {
     const load = async () => {
@@ -226,18 +228,32 @@ export default function StockListPublicExecute() {
   }
 
   const handleComplete = async () => {
-    if (!confirm('Confirmar conclusão da contagem? Esta ação registrará o horário de término.')) return
+    if (!confirm('Confirmar envio da contagem?')) return
     setCompleting(true)
     try {
       const { data } = await api.post(`/stock/lists/${id}/complete-counting`)
       setCompletedSession(data.session)
+      // Busca o texto completo da contagem (mesmo formato do TXT)
+      try {
+        const txtRes = await api.get(`/stock/lists/${id}/export-txt`, { responseType: 'text' })
+        setFullText(txtRes.data)
+      } catch {}
       setCompleted(true)
-      toast.success('Contagem concluída!')
+      toast.success('Contagem enviada!')
     } catch {
-      toast.error('Erro ao concluir contagem')
+      toast.error('Erro ao enviar contagem')
     } finally {
       setCompleting(false)
     }
+  }
+
+  const handleCopyText = () => {
+    if (!fullText) return
+    navigator.clipboard.writeText(fullText).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+      toast.success('Texto copiado!')
+    })
   }
 
   const handleShareResult = () => {
@@ -281,18 +297,6 @@ export default function StockListPublicExecute() {
     )
   }
 
-  if (list?.status === 'finalizada') {
-    return (
-      <div className="min-h-screen bg-dark-900 flex items-center justify-center p-4">
-        <div className="text-center">
-          <CheckCircle className="w-12 h-12 text-emerald-400 mx-auto mb-3" />
-          <p className="text-white font-semibold mb-1">Lista já finalizada</p>
-          <p className="text-dark-400 text-sm">Esta lista foi encerrada pelo gestor.</p>
-        </div>
-      </div>
-    )
-  }
-
   const filledItems = items.filter(i => i.quantity !== null && i.quantity !== undefined)
   const progress = items.length > 0 ? Math.round((filledItems.length / items.length) * 100) : 0
   const allFilled = items.length > 0 && filledItems.length === items.length
@@ -304,14 +308,14 @@ export default function StockListPublicExecute() {
     const fmt = (d) => d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
 
     return (
-      <div className="min-h-screen bg-dark-900 flex items-center justify-center p-4">
-        <div className="max-w-sm w-full">
+      <div className="min-h-screen bg-dark-900">
+        <div className="max-w-lg mx-auto px-4 py-6">
           <div className="text-center mb-6">
             <div className="w-16 h-16 bg-emerald-500 rounded-full flex items-center justify-center mx-auto mb-4">
               <CheckCircle className="w-9 h-9 text-white" />
             </div>
-            <h1 className="text-2xl font-bold text-white mb-1">Contagem Concluída!</h1>
-            <p className="text-dark-400 text-sm">O gestor irá revisar e finalizar a lista.</p>
+            <h1 className="text-2xl font-bold text-white mb-1">Contagem Enviada!</h1>
+            <p className="text-dark-400 text-sm">O gestor irá revisar o resultado.</p>
           </div>
 
           <div className="bg-dark-800 border border-dark-700 rounded-2xl p-5 space-y-3 mb-4">
@@ -328,7 +332,7 @@ export default function StockListPublicExecute() {
               <span className="text-white font-medium">{fmt(started)}</span>
             </div>
             <div className="flex justify-between text-sm">
-              <span className="text-dark-400 flex items-center gap-1"><Clock className="w-3.5 h-3.5" /> Conclusão</span>
+              <span className="text-dark-400 flex items-center gap-1"><Clock className="w-3.5 h-3.5" /> Envio</span>
               <span className="text-white font-medium">{fmt(ended)}</span>
             </div>
             <div className="flex justify-between text-sm">
@@ -341,13 +345,47 @@ export default function StockListPublicExecute() {
             </div>
           </div>
 
-          <button
-            onClick={handleShareResult}
-            className="flex items-center justify-center gap-2 w-full py-3.5 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold rounded-xl transition-colors"
-          >
-            <Share2 className="w-5 h-5" />
-            Compartilhar resultado via WhatsApp
-          </button>
+          {fullText && (
+            <div className="mb-4">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-sm font-semibold text-dark-300">Relatório completo</p>
+                <button onClick={handleCopyText}
+                  className="flex items-center gap-1.5 text-xs text-primary-400 hover:text-primary-300 transition-colors">
+                  <Sparkles className="w-3.5 h-3.5" />
+                  {copied ? 'Copiado!' : 'Copiar tudo'}
+                </button>
+              </div>
+              <pre className="bg-dark-900 border border-dark-700 rounded-xl p-4 text-xs text-dark-200 font-mono overflow-auto max-h-72 leading-relaxed whitespace-pre">
+                {fullText}
+              </pre>
+            </div>
+          )}
+
+          <div className="space-y-2">
+            <button
+              onClick={handleShareResult}
+              className="flex items-center justify-center gap-2 w-full py-3.5 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold rounded-xl transition-colors"
+            >
+              <Share2 className="w-5 h-5" />
+              Compartilhar via WhatsApp
+            </button>
+            {fullText && (
+              <button
+                onClick={() => {
+                  const blob = new Blob([fullText], { type: 'text/plain;charset=utf-8' })
+                  const url = URL.createObjectURL(blob)
+                  const a = document.createElement('a')
+                  a.href = url
+                  a.download = `contagem-${list?.name?.replace(/[^a-zA-Z0-9]/g, '-') || 'lista'}-${new Date().toISOString().split('T')[0]}.txt`
+                  a.click()
+                  URL.revokeObjectURL(url)
+                }}
+                className="flex items-center justify-center gap-2 w-full py-3 bg-dark-800 border border-dark-700 hover:bg-dark-700 text-white rounded-xl transition-colors text-sm"
+              >
+                Baixar TXT
+              </button>
+            )}
+          </div>
 
           <p className="text-center text-xs text-dark-600 mt-6">CheckList Pro</p>
         </div>
@@ -427,7 +465,7 @@ export default function StockListPublicExecute() {
               }`}
             >
               <CheckCircle className="w-5 h-5" />
-              {completing ? 'Concluindo...' : allFilled ? 'Concluir Contagem' : `Concluir (${filledItems.length}/${items.length} preenchidos)`}
+              {completing ? 'Enviando...' : allFilled ? 'Enviar Contagem' : `Enviar (${filledItems.length}/${items.length} preenchidos)`}
             </button>
             {!allFilled && (
               <p className="text-center text-xs text-dark-500 mt-2">

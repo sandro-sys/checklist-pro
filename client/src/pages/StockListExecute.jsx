@@ -224,21 +224,6 @@ export default function StockListExecute() {
   if (loading) return <div className="py-20 text-center text-dark-400">Carregando...</div>
   if (!list) return <div className="py-20 text-center text-dark-400">Lista não encontrada</div>
 
-  if (list.status === 'finalizada') {
-    return (
-      <div className="py-20 text-center">
-        <CheckCircle className="w-12 h-12 text-emerald-400 mx-auto mb-3" />
-        <p className="text-white font-semibold mb-1">Lista já finalizada</p>
-        <button
-          onClick={() => navigate(`/estoque/listas/${id}`)}
-          className="text-primary-400 hover:text-primary-300 text-sm"
-        >
-          Ver detalhes →
-        </button>
-      </div>
-    )
-  }
-
   const filledItems = items.filter(i => i.quantity !== null && i.quantity !== undefined)
   const progress = items.length > 0 ? Math.round((filledItems.length / items.length) * 100) : 0
   const allFilled = items.length > 0 && filledItems.length === items.length

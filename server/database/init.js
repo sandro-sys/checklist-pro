@@ -344,6 +344,7 @@ async function initPostgres() {
     )
   `);
   try { await pgPool.query(`ALTER TABLE stock_lists ADD COLUMN assigned_to TEXT`); } catch (_) {}
+  try { await pgPool.query(`ALTER TABLE stock_lists ADD COLUMN assigned_to_ids TEXT`); } catch (_) {}
   try { await pgPool.query(`ALTER TABLE companies ADD COLUMN is_blocked INTEGER DEFAULT 0`); } catch (_) {}
 
   await pgPool.query(`
@@ -761,6 +762,9 @@ async function initSQLite() {
   } catch (e) {}
   try {
     db.run(`ALTER TABLE stock_lists ADD COLUMN assigned_to TEXT`);
+  } catch (e) {}
+  try {
+    db.run(`ALTER TABLE stock_lists ADD COLUMN assigned_to_ids TEXT`);
   } catch (e) {}
 
   saveDatabase();

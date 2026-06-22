@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Plus, Trash2, Download, CheckCircle, AlertTriangle, Search, Package, Edit2, Save, X, ClipboardCheck, User, Sparkles, ListPlus, Check, Share2, Copy, ExternalLink, QrCode, RotateCcw, CopyPlus } from 'lucide-react'
+import { ArrowLeft, Plus, Trash2, Download, CheckCircle, AlertTriangle, Search, Package, Edit2, Save, X, ClipboardCheck, User, Sparkles, ListPlus, Check, Share2, Copy, ExternalLink, QrCode, RotateCcw, CopyPlus, Users } from 'lucide-react'
 import api from '../services/api'
 import toast from 'react-hot-toast'
 
@@ -469,11 +469,12 @@ export default function StockListEdit() {
   const [products, setProducts] = useState([])
   const [users, setUsers] = useState([])
   const [loading, setLoading] = useState(true)
-  const [finalizing, setFinalizing] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [resetting, setResetting] = useState(false)
+  const [startingCount, setStartingCount] = useState(false)
   const [showBulkAdd, setShowBulkAdd] = useState(false)
   const [showShare, setShowShare] = useState(false)
+  const [showAssignees, setShowAssignees] = useState(false)
 
   const load = async () => {
     try {
@@ -504,31 +505,37 @@ export default function StockListEdit() {
     }
   }
 
-  const handleFinalize = async () => {
-    if (!confirm(`Finalizar "${list.name}"?\n\nOs estoques dos produtos cadastrados serão atualizados. Esta ação não pode ser desfeita.`)) return
-    setFinalizing(true)
+  const handleAssignees = async (newIds) => {
     try {
-      await api.post(`/stock/lists/${id}/finalize`)
-      toast.success('Lista finalizada! Estoques atualizados.')
-      load()
-    } catch (err) {
-      toast.error(err.response?.data?.error || 'Erro ao finalizar lista')
-    } finally {
-      setFinalizing(false)
+      await api.put(`/stock/lists/${id}`, { assigned_to_ids: newIds })
+      const names = newIds.map(uid => users.find(u => u.id === uid)?.name).filter(Boolean)
+      setList(prev => ({ ...prev, assigned_to_ids: newIds, assigned_to_names: names }))
+      toast.success(newIds.length ? 'Responsáveis atualizados' : 'Responsáveis removidos')
+    } catch {
+      toast.error('Erro ao salvar responsáveis')
     }
   }
 
-  const handleAssign = async (assignedTo) => {
+  const toggleAssignee = (userId) => {
+    const current = list?.assigned_to_ids || []
+    const next = current.includes(userId)
+      ? current.filter(id => id !== userId)
+      : [...current, userId]
+    handleAssignees(next)
+  }
+
+  const handleStartCounting = async () => {
+    setStartingCount(true)
     try {
-      await api.put(`/stock/lists/${id}`, { assigned_to: assignedTo || null })
-      setList(prev => ({
-        ...prev,
-        assigned_to: assignedTo || null,
-        assigned_to_name: users.find(u => u.id === assignedTo)?.name || null
-      }))
-      toast.success(assignedTo ? 'Lista atribuída' : 'Atribuição removida')
-    } catch {
-      toast.error('Erro ao salvar atribuição')
+      const hasQuantities = items.some(i => i.quantity !== null && i.quantity !== undefined)
+      if (hasQuantities) {
+        await api.post(`/stock/lists/${id}/reset-counting`)
+        setItems(prev => prev.map(i => ({ ...i, quantity: null, flavor: null, notes: null })))
+      }
+      navigate(`/estoque/listas/${id}/executar`)
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Erro ao iniciar contagem')
+      setStartingCount(false)
     }
   }
 
@@ -591,7 +598,8 @@ export default function StockListEdit() {
   if (loading) return <div className="py-20 text-center text-dark-400">Carregando...</div>
   if (!list) return <div className="py-20 text-center text-dark-400">Lista não encontrada</div>
 
-  const finalized = list.status === 'finalizada'
+  const assignedIds = Array.isArray(list.assigned_to_ids) ? list.assigned_to_ids : []
+  const assignedNames = Array.isArray(list.assigned_to_names) ? list.assigned_to_names : []
   const itemsWithQty = items.filter(i => i.quantity !== null && i.quantity !== undefined)
   const progress = items.length > 0 ? Math.round((itemsWithQty.length / items.length) * 100) : 0
 
@@ -605,16 +613,9 @@ export default function StockListEdit() {
         </button>
 
         <div className="flex-1 min-w-0">
-          {/* Tipo + status */}
           <div className="flex items-center gap-2 flex-wrap mb-1">
             <span className="text-xs text-dark-500 uppercase tracking-wider font-medium">{TYPE_LABELS[list.type]}</span>
-            {finalized
-              ? <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1"><CheckCircle className="w-3 h-3" /> Finalizada</span>
-              : <span className="text-xs px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30">Em edição</span>
-            }
           </div>
-
-          {/* Título — sem truncate para não cortar */}
           <h1 className="text-xl font-bold text-white leading-snug">{list.name}</h1>
           {list.notes && <p className="text-dark-400 text-sm mt-0.5">{list.notes}</p>}
           <p className="text-xs text-dark-600 mt-0.5">
@@ -622,7 +623,6 @@ export default function StockListEdit() {
           </p>
         </div>
 
-        {/* Ações secundárias — ícones, sem texto */}
         <div className="flex items-center gap-1 flex-shrink-0 mt-1">
           <button onClick={() => setShowShare(true)} title="Compartilhar link de contagem"
             className="p-2 text-dark-400 hover:text-primary-400 hover:bg-primary-500/10 rounded-xl transition-colors">
@@ -635,60 +635,61 @@ export default function StockListEdit() {
         </div>
       </div>
 
-      {/* Header — linha 2: colaborador + ações principais */}
+      {/* Header — linha 2: responsáveis + ações principais */}
       <div className="flex items-center gap-3 flex-wrap">
-        {/* Atribuição — campo com label clara */}
-        {!finalized && users.length > 0 && (
-          <div className="flex items-center gap-2 bg-dark-800 border border-dark-700 hover:border-dark-600 rounded-xl px-3 py-2 transition-colors">
-            <User className="w-4 h-4 text-dark-500 flex-shrink-0" />
-            <span className="text-xs text-dark-500 whitespace-nowrap">Responsável:</span>
-            <select
-              value={list.assigned_to || ''}
-              onChange={e => handleAssign(e.target.value)}
-              className="text-sm bg-transparent border-none text-white focus:outline-none cursor-pointer max-w-[180px]"
+        {/* Responsáveis — multi-select */}
+        {users.length > 0 && (
+          <div className="relative">
+            <button
+              onClick={() => setShowAssignees(prev => !prev)}
+              className="flex items-center gap-2 bg-dark-800 border border-dark-700 hover:border-dark-600 rounded-xl px-3 py-2 transition-colors"
             >
-              <option value="" className="bg-dark-800">— Sem atribuição —</option>
-              {users.map(u => (
-                <option key={u.id} value={u.id} className="bg-dark-800">{u.name}</option>
-              ))}
-            </select>
-          </div>
-        )}
-        {finalized && list.assigned_to_name && (
-          <div className="flex items-center gap-2 bg-dark-800/50 border border-dark-700/50 rounded-xl px-3 py-2">
-            <User className="w-4 h-4 text-dark-500" />
-            <span className="text-xs text-dark-500">Responsável:</span>
-            <span className="text-sm text-white">{list.assigned_to_name}</span>
+              <Users className="w-4 h-4 text-dark-500 flex-shrink-0" />
+              <span className="text-xs text-dark-500 whitespace-nowrap">Responsáveis:</span>
+              <span className="text-sm text-white max-w-[200px] truncate">
+                {assignedNames.length > 0 ? assignedNames.join(', ') : '— Nenhum —'}
+              </span>
+            </button>
+            {showAssignees && (
+              <div className="absolute top-full mt-1 left-0 z-20 bg-dark-800 border border-dark-700 rounded-xl shadow-xl min-w-[220px] py-1">
+                {users.map(u => (
+                  <button key={u.id} type="button" onClick={() => toggleAssignee(u.id)}
+                    className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-dark-700 transition-colors text-left">
+                    <div className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 ${assignedIds.includes(u.id) ? 'bg-primary-500 border-primary-500' : 'border-dark-500'}`}>
+                      {assignedIds.includes(u.id) && <Check className="w-3 h-3 text-white" />}
+                    </div>
+                    <span className="text-sm text-white">{u.name}</span>
+                  </button>
+                ))}
+                <div className="border-t border-dark-700 mt-1 pt-1 px-4 pb-2">
+                  <button onClick={() => setShowAssignees(false)} className="text-xs text-dark-500 hover:text-white">Fechar</button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
         {/* Ações principais — lado direito */}
         <div className="flex items-center gap-2 ml-auto flex-wrap justify-end">
-          {!finalized && items.length > 0 && (
+          {items.length > 0 && (
             <button onClick={handleReset} disabled={resetting}
-              className="flex items-center gap-1.5 px-3 py-2 border border-amber-500/30 text-amber-400 hover:bg-amber-500/10 rounded-xl text-sm transition-colors disabled:opacity-50">
+              className="flex items-center gap-1.5 px-3 py-2 border border-dark-700 text-dark-400 hover:text-amber-400 hover:border-amber-500/30 hover:bg-amber-500/10 rounded-xl text-sm transition-colors disabled:opacity-50">
               <RotateCcw className="w-3.5 h-3.5" />
-              {resetting ? 'Limpando...' : 'Limpar e Recontar'}
+              {resetting ? 'Limpando...' : 'Limpar'}
             </button>
           )}
-          {!finalized && items.length > 0 && (
-            <button onClick={() => navigate(`/estoque/listas/${id}/executar`)}
-              className="flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-primary-500 to-accent-teal text-white font-semibold rounded-xl hover:shadow-lg hover:shadow-primary-500/25 transition-all text-sm">
-              <ClipboardCheck className="w-4 h-4" /> Iniciar Contagem
-            </button>
-          )}
-          {!finalized && (
-            <button onClick={handleFinalize} disabled={finalizing || items.length === 0}
-              className="flex items-center gap-1.5 px-4 py-2 bg-dark-800 border border-dark-700 text-dark-300 hover:text-white hover:border-dark-600 rounded-xl transition-all disabled:opacity-50 text-sm">
-              <CheckCircle className="w-4 h-4" />
-              {finalizing ? 'Finalizando...' : 'Finalizar Lista'}
+          {items.length > 0 && (
+            <button onClick={handleStartCounting} disabled={startingCount}
+              className="flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-primary-500 to-accent-teal text-white font-semibold rounded-xl hover:shadow-lg hover:shadow-primary-500/25 transition-all text-sm disabled:opacity-50">
+              <ClipboardCheck className="w-4 h-4" />
+              {startingCount ? 'Iniciando...' : 'Iniciar Contagem'}
             </button>
           )}
         </div>
       </div>
 
       {/* Progresso */}
-      {!finalized && items.length > 0 && (
+      {items.length > 0 && (
         <div className="bg-dark-800/50 border border-dark-700/50 rounded-xl p-4">
           <div className="flex items-center justify-between text-sm mb-2">
             <span className="text-dark-400">Itens com quantidade preenchida</span>
@@ -704,16 +705,10 @@ export default function StockListEdit() {
       <div className="bg-dark-800/50 border border-dark-700/50 rounded-2xl overflow-hidden">
         <div className="flex items-center justify-between px-5 py-4 border-b border-dark-700">
           <h2 className="text-sm font-semibold text-white">{items.length} {items.length === 1 ? 'item' : 'itens'}</h2>
-          {finalized && list.finalized_at ? (
-            <span className="text-xs text-dark-400">
-              Finalizada em {new Date(list.finalized_at).toLocaleDateString('pt-BR')} às {new Date(list.finalized_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-            </span>
-          ) : !finalized && (
-            <button onClick={() => setShowBulkAdd(true)}
-              className="flex items-center gap-2 px-3 py-1.5 bg-primary-500/10 text-primary-400 border border-primary-500/30 rounded-lg text-xs font-semibold hover:bg-primary-500/20 transition-colors">
-              <ListPlus className="w-3.5 h-3.5" /> Adicionar em massa
-            </button>
-          )}
+          <button onClick={() => setShowBulkAdd(true)}
+            className="flex items-center gap-2 px-3 py-1.5 bg-primary-500/10 text-primary-400 border border-primary-500/30 rounded-lg text-xs font-semibold hover:bg-primary-500/20 transition-colors">
+            <ListPlus className="w-3.5 h-3.5" /> Adicionar em massa
+          </button>
         </div>
 
         {items.length === 0 ? (
@@ -739,7 +734,7 @@ export default function StockListEdit() {
                   <ItemRow
                     key={item.id}
                     item={item}
-                    finalized={finalized}
+                    finalized={false}
                     onUpdate={(updated) => setItems(prev => prev.map(i => i.id === updated.id ? { ...i, ...updated } : i))}
                     onDelete={handleDelete}
                     onDuplicate={handleDuplicate}
@@ -752,13 +747,11 @@ export default function StockListEdit() {
       </div>
 
       {/* Adicionar item */}
-      {!finalized && (
-        <AddItemRow
-          listId={id}
-          products={products}
-          onAdded={(item) => setItems(prev => [...prev, item])}
-        />
-      )}
+      <AddItemRow
+        listId={id}
+        products={products}
+        onAdded={(item) => setItems(prev => [...prev, item])}
+      />
 
       {showBulkAdd && (
         <BulkAddModal

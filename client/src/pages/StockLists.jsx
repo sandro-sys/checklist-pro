@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, FileText, CheckCircle, Clock, Download, Eye, X, ClipboardList, ClipboardCheck, User, Share2, Copy, ExternalLink, QrCode, CopyPlus, Upload, AlertCircle, Info, ChevronRight, ChevronLeft, Loader2 } from 'lucide-react'
+import { Plus, FileText, CheckCircle, Clock, Download, Eye, X, ClipboardList, ClipboardCheck, User, Share2, Copy, ExternalLink, QrCode, CopyPlus, Upload, AlertCircle, Info, ChevronRight, ChevronLeft, Loader2, Trash2, Check } from 'lucide-react'
 import api from '../services/api'
 import { useAuthStore } from '../store/authStore'
 import toast from 'react-hot-toast'
@@ -89,7 +89,8 @@ const TYPE_COLORS = {
 }
 
 function NewListModal({ onClose, onCreate, users }) {
-  const [form, setForm] = useState({ name: '', type: 'contagem', notes: '', assigned_to: '' })
+  const [form, setForm] = useState({ name: '', type: 'contagem', notes: '' })
+  const [assignedToIds, setAssignedToIds] = useState([])
   const [saving, setSaving] = useState(false)
 
   const defaultName = () => {
@@ -98,15 +99,22 @@ function NewListModal({ onClose, onCreate, users }) {
     return `${label.toUpperCase()} ${d.toLocaleDateString('pt-BR')}`
   }
 
+  const toggleAssignee = (userId) => {
+    setAssignedToIds(prev =>
+      prev.includes(userId) ? prev.filter(id => id !== userId) : [...prev, userId]
+    )
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     setSaving(true)
     try {
       const name = form.name.trim() || defaultName()
       const { data } = await api.post('/stock/lists', {
-        ...form,
         name,
-        assigned_to: form.assigned_to || undefined
+        type: form.type,
+        notes: form.notes,
+        assigned_to_ids: assignedToIds
       })
       toast.success('Lista criada')
       onCreate(data.list)
@@ -148,19 +156,26 @@ function NewListModal({ onClose, onCreate, users }) {
               onChange={e => setForm({ ...form, name: e.target.value.toUpperCase() })}
             />
           </div>
-          <div>
-            <label className="block text-sm font-medium text-dark-300 mb-1">Atribuir a <span className="text-dark-500 text-xs">(opcional)</span></label>
-            <select
-              className="w-full bg-dark-700 border border-dark-600 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary-500"
-              value={form.assigned_to}
-              onChange={e => setForm({ ...form, assigned_to: e.target.value })}
-            >
-              <option value="">— Sem atribuição —</option>
-              {activeUsers.map(u => (
-                <option key={u.id} value={u.id}>{u.name}</option>
-              ))}
-            </select>
-          </div>
+          {activeUsers.length > 0 && (
+            <div>
+              <label className="block text-sm font-medium text-dark-300 mb-2">Responsáveis <span className="text-dark-500 text-xs">(opcional — pode ser mais de um)</span></label>
+              <div className="space-y-1.5 max-h-36 overflow-y-auto">
+                {activeUsers.map(u => (
+                  <button key={u.id} type="button" onClick={() => toggleAssignee(u.id)}
+                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl border transition-all text-left ${
+                      assignedToIds.includes(u.id)
+                        ? 'bg-primary-500/20 border-primary-500/40 text-white'
+                        : 'bg-dark-700 border-dark-600 text-dark-300 hover:text-white hover:border-dark-500'
+                    }`}>
+                    <div className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 ${assignedToIds.includes(u.id) ? 'bg-primary-500 border-primary-500' : 'border-dark-500'}`}>
+                      {assignedToIds.includes(u.id) && <Check className="w-3 h-3 text-white" />}
+                    </div>
+                    <span className="text-sm">{u.name}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           <div>
             <label className="block text-sm font-medium text-dark-300 mb-1">Observação <span className="text-dark-500 text-xs">(opcional)</span></label>
             <input
@@ -502,6 +517,17 @@ export default function StockLists() {
     }
   }
 
+  const handleDeleteList = async (list) => {
+    if (!confirm(`Excluir a lista "${list.name}"?\n\nEsta ação não pode ser desfeita.`)) return
+    try {
+      await api.delete(`/stock/lists/${list.id}`)
+      setLists(prev => prev.filter(l => l.id !== list.id))
+      toast.success('Lista excluída')
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Erro ao excluir lista')
+    }
+  }
+
   const handleExport = async (list) => {
     try {
       const response = await api.get(`/stock/lists/${list.id}/export-txt`, { responseType: 'blob' })
@@ -516,74 +542,68 @@ export default function StockLists() {
     }
   }
 
-  const myPendingLists = lists.filter(l => l.assigned_to === user?.id && l.status === 'editing')
-  const editingLists   = lists.filter(l => l.status === 'editing')
-  const finalizedLists = lists.filter(l => l.status === 'finalizada')
+  const myPendingLists = lists.filter(l => {
+    const ids = Array.isArray(l.assigned_to_ids) ? l.assigned_to_ids : []
+    return ids.includes(user?.id) || l.assigned_to === user?.id
+  })
 
-  const ListCard = ({ list, highlight }) => (
-    <div className={`border rounded-2xl p-5 transition-all ${
-      highlight
-        ? 'bg-primary-500/10 border-primary-500/30 hover:border-primary-500/50'
-        : 'bg-dark-800/50 border-dark-700/50 hover:border-dark-600'
-    }`}>
-      <div className="flex items-start justify-between gap-3 mb-3">
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${TYPE_COLORS[list.type]}`}>
-              {TYPE_LABELS[list.type]}
-            </span>
-            {list.status === 'finalizada' && (
-              <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-medium flex items-center gap-1">
-                <CheckCircle className="w-3 h-3" /> Finalizada
+  const ListCard = ({ list, highlight }) => {
+    const assignedNames = Array.isArray(list.assigned_to_names) ? list.assigned_to_names : []
+    return (
+      <div className={`border rounded-2xl p-5 transition-all ${
+        highlight
+          ? 'bg-primary-500/10 border-primary-500/30 hover:border-primary-500/50'
+          : 'bg-dark-800/50 border-dark-700/50 hover:border-dark-600'
+      }`}>
+        <div className="flex items-start justify-between gap-3 mb-3">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${TYPE_COLORS[list.type]}`}>
+                {TYPE_LABELS[list.type]}
               </span>
-            )}
-            {list.status === 'editing' && (
-              <span className="text-xs px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30 font-medium flex items-center gap-1">
-                <Clock className="w-3 h-3" /> Em edição
-              </span>
-            )}
+            </div>
+            <h3 className="text-white font-semibold mt-2 truncate">{list.name}</h3>
+            {list.notes && <p className="text-dark-400 text-xs mt-0.5 truncate">{list.notes}</p>}
           </div>
-          <h3 className="text-white font-semibold mt-2 truncate">{list.name}</h3>
-          {list.notes && <p className="text-dark-400 text-xs mt-0.5 truncate">{list.notes}</p>}
-        </div>
-        <div className="flex gap-1 flex-shrink-0">
-          <button onClick={() => setShareList(list)} className="p-2 text-dark-400 hover:text-primary-400 hover:bg-primary-500/10 rounded-lg transition-colors" title="Compartilhar link de contagem">
-            <Share2 className="w-4 h-4" />
-          </button>
-          <button onClick={() => handleCopyList(list)} className="p-2 text-dark-400 hover:text-primary-400 hover:bg-primary-500/10 rounded-lg transition-colors" title="Copiar lista">
-            <CopyPlus className="w-4 h-4" />
-          </button>
-          <button onClick={() => handleExport(list)} className="p-2 text-dark-400 hover:text-primary-400 hover:bg-primary-500/10 rounded-lg transition-colors" title="Exportar TXT">
-            <Download className="w-4 h-4" />
-          </button>
-          {list.status === 'editing' && (
+          <div className="flex gap-1 flex-shrink-0">
+            <button onClick={() => setShareList(list)} className="p-2 text-dark-400 hover:text-primary-400 hover:bg-primary-500/10 rounded-lg transition-colors" title="Compartilhar link de contagem">
+              <Share2 className="w-4 h-4" />
+            </button>
+            <button onClick={() => handleCopyList(list)} className="p-2 text-dark-400 hover:text-primary-400 hover:bg-primary-500/10 rounded-lg transition-colors" title="Copiar lista">
+              <CopyPlus className="w-4 h-4" />
+            </button>
+            <button onClick={() => handleExport(list)} className="p-2 text-dark-400 hover:text-primary-400 hover:bg-primary-500/10 rounded-lg transition-colors" title="Exportar TXT">
+              <Download className="w-4 h-4" />
+            </button>
             <button onClick={() => navigate(`/estoque/listas/${list.id}/executar`)} className="p-2 text-dark-400 hover:text-emerald-400 hover:bg-emerald-500/10 rounded-lg transition-colors" title="Iniciar contagem">
               <ClipboardCheck className="w-4 h-4" />
             </button>
-          )}
-          <button onClick={() => navigate(`/estoque/listas/${list.id}`)} className="p-2 text-dark-400 hover:text-white hover:bg-dark-700 rounded-lg transition-colors" title={list.status === 'editing' ? 'Configurar lista' : 'Ver lista'}>
-            {list.status === 'editing' ? <FileText className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-          </button>
+            <button onClick={() => navigate(`/estoque/listas/${list.id}`)} className="p-2 text-dark-400 hover:text-white hover:bg-dark-700 rounded-lg transition-colors" title="Editar lista">
+              <FileText className="w-4 h-4" />
+            </button>
+            <button onClick={() => handleDeleteList(list)} className="p-2 text-dark-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors" title="Excluir lista">
+              <Trash2 className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+
+        {assignedNames.length > 0 && (
+          <div className="flex items-center gap-1.5 mb-3 flex-wrap">
+            <User className="w-3 h-3 text-dark-500 flex-shrink-0" />
+            <span className="text-xs text-dark-400">{assignedNames.join(', ')}</span>
+          </div>
+        )}
+
+        <div className="flex items-center gap-4 text-xs text-dark-500 pt-3 border-t border-dark-700/50">
+          <span>{list.items_count} {list.items_count === 1 ? 'item' : 'itens'}</span>
+          <span>•</span>
+          <span>{list.created_by_name}</span>
+          <span>•</span>
+          <span>{new Date(list.created_at).toLocaleDateString('pt-BR')}</span>
         </div>
       </div>
-
-      {/* Atribuição */}
-      {list.assigned_to_name && (
-        <div className="flex items-center gap-1.5 mb-3">
-          <User className="w-3 h-3 text-dark-500 flex-shrink-0" />
-          <span className="text-xs text-dark-400 truncate">{list.assigned_to_name}</span>
-        </div>
-      )}
-
-      <div className="flex items-center gap-4 text-xs text-dark-500 pt-3 border-t border-dark-700/50">
-        <span>{list.items_count} {list.items_count === 1 ? 'item' : 'itens'}</span>
-        <span>•</span>
-        <span>{list.created_by_name}</span>
-        <span>•</span>
-        <span>{new Date(list.created_at).toLocaleDateString('pt-BR')}</span>
-      </div>
-    </div>
-  )
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -638,19 +658,11 @@ export default function StockLists() {
             </div>
           )}
 
-          {editingLists.length > 0 && (
+          {lists.length > 0 && (
             <div>
-              <h2 className="text-sm font-semibold text-dark-400 uppercase tracking-wider mb-3">Em Edição ({editingLists.length})</h2>
+              <h2 className="text-sm font-semibold text-dark-400 uppercase tracking-wider mb-3">Todas as Listas ({lists.length})</h2>
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                {editingLists.map(l => <ListCard key={l.id} list={l} />)}
-              </div>
-            </div>
-          )}
-          {finalizedLists.length > 0 && (
-            <div>
-              <h2 className="text-sm font-semibold text-dark-400 uppercase tracking-wider mb-3">Finalizadas ({finalizedLists.length})</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                {finalizedLists.map(l => <ListCard key={l.id} list={l} />)}
+                {lists.map(l => <ListCard key={l.id} list={l} />)}
               </div>
             </div>
           )}
