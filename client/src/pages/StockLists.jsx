@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, FileText, CheckCircle, Clock, Download, Eye, X, ClipboardList, ClipboardCheck, User, Share2, Copy, ExternalLink, QrCode, CopyPlus, Upload, AlertCircle, Info, ChevronRight, ChevronLeft, Loader2, Trash2, Check } from 'lucide-react'
+import { Plus, FileText, CheckCircle, Clock, Download, Eye, X, ClipboardList, ClipboardCheck, User, Share2, Copy, ExternalLink, QrCode, CopyPlus, Upload, AlertCircle, Info, ChevronRight, ChevronLeft, Loader2, Trash2, Check, RotateCcw, Inbox } from 'lucide-react'
 import api from '../services/api'
 import { useAuthStore } from '../store/authStore'
 import toast from 'react-hot-toast'
@@ -481,23 +481,27 @@ function ImportTxtModal({ onClose, onImported }) {
 
 export default function StockLists() {
   const [lists, setLists] = useState([])
+  const [trash, setTrash] = useState([])
   const [users, setUsers] = useState([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [showImportTxt, setShowImportTxt] = useState(false)
   const [shareList, setShareList] = useState(null)
+  const [showTrash, setShowTrash] = useState(false)
   const navigate = useNavigate()
   const { user } = useAuthStore()
 
   const load = async () => {
     setLoading(true)
     try {
-      const [listsRes, usersRes] = await Promise.all([
+      const [listsRes, usersRes, trashRes] = await Promise.all([
         api.get('/stock/lists'),
-        api.get('/users')
+        api.get('/users'),
+        api.get('/stock/lists/trash')
       ])
       setLists(listsRes.data)
       setUsers(usersRes.data)
+      setTrash(trashRes.data)
     } catch {
       toast.error('Erro ao carregar listas')
     } finally {
@@ -518,13 +522,25 @@ export default function StockLists() {
   }
 
   const handleDeleteList = async (list) => {
-    if (!confirm(`Excluir a lista "${list.name}"?\n\nEsta ação não pode ser desfeita.`)) return
+    if (!confirm(`Mover "${list.name}" para a lixeira?`)) return
     try {
       await api.delete(`/stock/lists/${list.id}`)
       setLists(prev => prev.filter(l => l.id !== list.id))
-      toast.success('Lista excluída')
+      setTrash(prev => [{ ...list, deleted_at: new Date().toISOString() }, ...prev])
+      toast.success('Lista movida para a lixeira')
     } catch (err) {
       toast.error(err.response?.data?.error || 'Erro ao excluir lista')
+    }
+  }
+
+  const handleRestoreList = async (list) => {
+    try {
+      await api.post(`/stock/lists/${list.id}/restore`)
+      setTrash(prev => prev.filter(l => l.id !== list.id))
+      await load()
+      toast.success(`"${list.name}" restaurada`)
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Erro ao restaurar lista')
     }
   }
 
@@ -664,6 +680,40 @@ export default function StockLists() {
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                 {lists.map(l => <ListCard key={l.id} list={l} />)}
               </div>
+            </div>
+          )}
+
+          {/* Lixeira */}
+          {trash.length > 0 && (
+            <div>
+              <button
+                onClick={() => setShowTrash(prev => !prev)}
+                className="flex items-center gap-2 text-sm text-dark-500 hover:text-dark-300 transition-colors mb-3"
+              >
+                <Inbox className="w-4 h-4" />
+                <span className="uppercase tracking-wider font-semibold">Lixeira ({trash.length})</span>
+                <ChevronRight className={`w-3 h-3 transition-transform ${showTrash ? 'rotate-90' : ''}`} />
+              </button>
+              {showTrash && (
+                <div className="space-y-2">
+                  {trash.map(l => (
+                    <div key={l.id} className="flex items-center justify-between gap-3 px-4 py-3 bg-dark-800/30 border border-dark-700/40 rounded-xl">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-dark-400 text-sm truncate">{l.name}</p>
+                        <p className="text-dark-600 text-xs mt-0.5">
+                          Excluída em {new Date(l.deleted_at).toLocaleDateString('pt-BR')}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => handleRestoreList(l)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 border border-emerald-500/20 rounded-lg transition-colors flex-shrink-0"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" /> Restaurar
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>

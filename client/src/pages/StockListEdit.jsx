@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Plus, Trash2, Download, CheckCircle, AlertTriangle, Search, Package, Edit2, Save, X, ClipboardCheck, User, Sparkles, ListPlus, Check, Share2, Copy, ExternalLink, QrCode, RotateCcw, CopyPlus, Users } from 'lucide-react'
+import { ArrowLeft, Plus, Trash2, Download, CheckCircle, AlertTriangle, Search, Package, Edit2, Save, X, ClipboardCheck, User, Sparkles, ListPlus, Check, Share2, Copy, ExternalLink, QrCode, RotateCcw, CopyPlus, Users, ArrowRightLeft } from 'lucide-react'
 import api from '../services/api'
 import toast from 'react-hot-toast'
 
@@ -105,7 +105,7 @@ function AddItemRow({ listId, products, onAdded }) {
         </div>
         <div>
           <label className="block text-xs text-dark-400 mb-1">Quantidade</label>
-          <input id="qty-input" type="number" min="0" step="1" inputMode="numeric"
+          <input id="qty-input" type="number" min="0" step="any" inputMode="decimal"
             className="w-full bg-dark-700 border border-dark-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-primary-500"
             placeholder="0" value={quantity} onChange={e => setQuantity(e.target.value)} />
         </div>
@@ -174,7 +174,7 @@ function ItemRow({ item, finalized, onUpdate, onDelete, onDuplicate }) {
           </select>
         </td>
         <td className="px-3 py-3">
-          <input type="number" min="0" step="1" inputMode="numeric"
+          <input type="number" min="0" step="any" inputMode="decimal"
             className="w-full bg-dark-700 border border-primary-500/50 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none text-right"
             value={form.quantity} onChange={e => setForm({ ...form, quantity: e.target.value })} autoFocus />
         </td>
@@ -217,7 +217,7 @@ function ItemRow({ item, finalized, onUpdate, onDelete, onDuplicate }) {
       <td className="px-3 py-3 text-center text-dark-300 text-sm">{item.unit}</td>
       <td className="px-3 py-3 text-right">
         <span className={`font-mono font-semibold text-sm ${item.quantity === null || item.quantity === undefined ? 'text-dark-500 italic' : isLow ? 'text-amber-400' : 'text-white'}`}>
-          {item.quantity !== null && item.quantity !== undefined ? parseInt(item.quantity).toLocaleString('pt-BR') : '—'}
+          {item.quantity !== null && item.quantity !== undefined ? parseFloat(item.quantity).toLocaleString('pt-BR', { maximumFractionDigits: 3 }) : '—'}
         </span>
       </td>
       <td className="px-3 py-3 text-dark-400 text-sm">{item.notes}</td>
@@ -461,6 +461,94 @@ function BulkAddModal({ listId, products, existingNames, onClose, onDone }) {
   )
 }
 
+function CopyToListModal({ listId, listName, onClose }) {
+  const [allLists, setAllLists] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [selected, setSelected] = useState(null)
+  const [copying, setCopying] = useState(false)
+  const [search, setSearch] = useState('')
+
+  useEffect(() => {
+    api.get('/stock/lists')
+      .then(({ data }) => setAllLists(data.filter(l => l.id !== listId)))
+      .catch(() => toast.error('Erro ao carregar listas'))
+      .finally(() => setLoading(false))
+  }, [listId])
+
+  const handleCopy = async () => {
+    if (!selected) return
+    setCopying(true)
+    try {
+      const { data } = await api.post(`/stock/lists/${listId}/copy-items-to`, { target_list_id: selected.id })
+      toast.success(data.message)
+      onClose()
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Erro ao copiar itens')
+    } finally {
+      setCopying(false)
+    }
+  }
+
+  const filtered = allLists.filter(l => l.name.includes(search.toUpperCase()) || search === '')
+
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-dark-800 border border-dark-700 rounded-2xl w-full max-w-md shadow-2xl flex flex-col max-h-[80vh]">
+        <div className="flex items-start justify-between p-5 border-b border-dark-700 flex-shrink-0">
+          <div>
+            <h2 className="text-base font-bold text-white flex items-center gap-2">
+              <ArrowRightLeft className="w-4 h-4 text-primary-400" /> Copiar Itens Para...
+            </h2>
+            <p className="text-xs text-dark-400 mt-0.5">De: {listName}</p>
+          </div>
+          <button onClick={onClose} className="p-2 text-dark-400 hover:text-white rounded-lg"><X className="w-5 h-5" /></button>
+        </div>
+
+        <div className="p-4 border-b border-dark-700 flex-shrink-0">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-400" />
+            <input
+              className="w-full bg-dark-700 border border-dark-600 rounded-xl pl-10 pr-4 py-2 text-white placeholder-dark-400 focus:outline-none focus:border-primary-500 text-sm uppercase"
+              placeholder="Filtrar listas..."
+              value={search}
+              onChange={e => setSearch(e.target.value.toUpperCase())}
+              autoFocus
+            />
+          </div>
+        </div>
+
+        <div className="overflow-y-auto flex-1 py-1">
+          {loading ? (
+            <div className="py-8 text-center text-dark-400 text-sm">Carregando...</div>
+          ) : filtered.length === 0 ? (
+            <div className="py-8 text-center text-dark-400 text-sm">Nenhuma lista encontrada</div>
+          ) : filtered.map(l => (
+            <button key={l.id} onClick={() => setSelected(l)}
+              className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-dark-700/40 text-left transition-colors border-b border-dark-700/20 last:border-0 ${selected?.id === l.id ? 'bg-primary-500/10' : ''}`}>
+              <div className={`w-4 h-4 rounded-full border-2 flex-shrink-0 transition-colors ${selected?.id === l.id ? 'border-primary-500 bg-primary-500' : 'border-dark-500'}`} />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm text-white truncate">{l.name}</p>
+                <p className="text-xs text-dark-500">{l.items_count} itens · {l.type}</p>
+              </div>
+            </button>
+          ))}
+        </div>
+
+        <div className="flex gap-3 p-5 border-t border-dark-700 flex-shrink-0">
+          <button onClick={onClose} disabled={copying} className="flex-1 py-2.5 rounded-xl border border-dark-600 text-dark-300 hover:text-white transition-colors disabled:opacity-50 text-sm">
+            Cancelar
+          </button>
+          <button onClick={handleCopy} disabled={copying || !selected}
+            className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-primary-500 to-accent-teal text-white font-semibold text-sm hover:shadow-lg hover:shadow-primary-500/25 transition-all disabled:opacity-50 flex items-center justify-center gap-2">
+            <ArrowRightLeft className="w-4 h-4" />
+            {copying ? 'Copiando...' : 'Copiar Itens'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function StockListEdit() {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -475,6 +563,7 @@ export default function StockListEdit() {
   const [showBulkAdd, setShowBulkAdd] = useState(false)
   const [showShare, setShowShare] = useState(false)
   const [showAssignees, setShowAssignees] = useState(false)
+  const [showCopyTo, setShowCopyTo] = useState(false)
 
   const load = async () => {
     try {
@@ -624,6 +713,10 @@ export default function StockListEdit() {
         </div>
 
         <div className="flex items-center gap-1 flex-shrink-0 mt-1">
+          <button onClick={() => setShowCopyTo(true)} title="Copiar itens para outra lista"
+            className="p-2 text-dark-400 hover:text-primary-400 hover:bg-primary-500/10 rounded-xl transition-colors">
+            <ArrowRightLeft className="w-4 h-4" />
+          </button>
           <button onClick={() => setShowShare(true)} title="Compartilhar link de contagem"
             className="p-2 text-dark-400 hover:text-primary-400 hover:bg-primary-500/10 rounded-xl transition-colors">
             <Share2 className="w-4.5 h-4.5" />
@@ -768,6 +861,14 @@ export default function StockListEdit() {
           listId={id}
           listName={list.name}
           onClose={() => setShowShare(false)}
+        />
+      )}
+
+      {showCopyTo && (
+        <CopyToListModal
+          listId={id}
+          listName={list.name}
+          onClose={() => setShowCopyTo(false)}
         />
       )}
     </div>

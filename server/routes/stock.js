@@ -14,7 +14,7 @@ router.get('/public/:id', async (req, res) => {
       `SELECT sl.*, comp.name as company_name
        FROM stock_lists sl
        LEFT JOIN companies comp ON sl.company_id = comp.id
-       WHERE sl.id = ?`,
+       WHERE sl.id = ? AND sl.deleted_at IS NULL`,
       [id]
     );
     if (!list) return res.status(404).json({ error: 'Lista não encontrada' });
@@ -49,7 +49,7 @@ router.put('/public/:id/items/:itemId', async (req, res) => {
     await dbRunAsync(
       `UPDATE stock_list_items SET quantity = ?, flavor = ?, notes = ? WHERE id = ?`,
       [
-        quantity !== undefined ? (quantity !== '' ? parseInt(quantity) : null) : item.quantity,
+        quantity !== undefined ? (quantity !== '' ? parseFloat(String(quantity).replace(',', '.')) : null) : item.quantity,
         flavor !== undefined ? flavor : item.flavor,
         notes !== undefined ? notes : item.notes,
         itemId
@@ -191,8 +191,8 @@ router.get('/lists', async (req, res) => {
        FROM stock_lists sl
        LEFT JOIN users u  ON sl.created_by  = u.id
        LEFT JOIN users u2 ON sl.assigned_to = u2.id
-       WHERE sl.company_id = ?
-       ORDER BY sl.created_at DESC`,
+       WHERE sl.company_id = ? AND sl.deleted_at IS NULL
+       ORDER BY sl.name ASC`,
       [req.user.company_id]
     );
     const companyUsers = await dbAllAsync(`SELECT id, name FROM users WHERE company_id = ?`, [req.user.company_id]);
@@ -211,7 +211,13 @@ router.get('/lists', async (req, res) => {
       }
       return { ...list, assigned_to_ids, assigned_to_names };
     });
-    res.json(processed);
+    // Usuários comuns (role_type='user') só veem as listas em que são responsáveis
+    const isPrivileged = req.user.role_type !== 'user' || req.user.is_master;
+    const result = isPrivileged ? processed : processed.filter(l => {
+      const ids = Array.isArray(l.assigned_to_ids) ? l.assigned_to_ids : [];
+      return ids.includes(req.user.id) || l.assigned_to === req.user.id;
+    });
+    res.json(result);
   } catch (e) {
     console.error('Erro ao listar listas:', e);
     res.status(500).json({ error: 'Erro ao listar listas' });
@@ -281,6 +287,20 @@ router.post('/lists', async (req, res) => {
   }
 });
 
+router.get('/lists/trash', async (req, res) => {
+  if (!guardCompany(req, res)) return;
+  try {
+    const lists = await dbAllAsync(
+      `SELECT * FROM stock_lists WHERE company_id = ? AND deleted_at IS NOT NULL ORDER BY deleted_at DESC LIMIT 30`,
+      [req.user.company_id]
+    );
+    res.json(lists);
+  } catch (e) {
+    console.error('Erro ao listar lixeira:', e);
+    res.status(500).json({ error: 'Erro ao listar lixeira' });
+  }
+});
+
 router.get('/lists/:id', async (req, res) => {
   if (!guardCompany(req, res)) return;
   try {
@@ -290,7 +310,7 @@ router.get('/lists/:id', async (req, res) => {
        FROM stock_lists sl
        LEFT JOIN users u  ON sl.created_by  = u.id
        LEFT JOIN users u2 ON sl.assigned_to = u2.id
-       WHERE sl.id = ? AND sl.company_id = ?`,
+       WHERE sl.id = ? AND sl.company_id = ? AND sl.deleted_at IS NULL`,
       [id, req.user.company_id]
     );
     if (!list) return res.status(404).json({ error: 'Lista não encontrada' });
@@ -433,21 +453,33 @@ router.delete('/lists/:id/items/:itemId', async (req, res) => {
   }
 });
 
-// Excluir lista
+// Mover lista para lixeira (soft delete)
 router.delete('/lists/:id', async (req, res) => {
   if (!guardCompany(req, res)) return;
   try {
     const { id } = req.params;
-    const list = await dbGetAsync(`SELECT id FROM stock_lists WHERE id = ? AND company_id = ?`, [id, req.user.company_id]);
+    const list = await dbGetAsync(`SELECT id, name FROM stock_lists WHERE id = ? AND company_id = ? AND deleted_at IS NULL`, [id, req.user.company_id]);
     if (!list) return res.status(404).json({ error: 'Lista não encontrada' });
-    await dbRunAsync(`DELETE FROM stock_list_items WHERE list_id = ?`, [id]);
-    await dbRunAsync(`DELETE FROM stock_counting_sessions WHERE list_id = ?`, [id]);
-    await dbRunAsync(`DELETE FROM stock_movements WHERE list_id = ?`, [id]);
-    await dbRunAsync(`DELETE FROM stock_lists WHERE id = ?`, [id]);
-    res.json({ message: 'Lista excluída' });
+    await dbRunAsync(`UPDATE stock_lists SET deleted_at = ? WHERE id = ?`, [new Date().toISOString(), id]);
+    res.json({ message: 'Lista movida para a lixeira', list_name: list.name });
   } catch (e) {
     console.error('Erro ao excluir lista:', e);
     res.status(500).json({ error: 'Erro ao excluir lista' });
+  }
+});
+
+// Restaurar lista da lixeira
+router.post('/lists/:id/restore', async (req, res) => {
+  if (!guardCompany(req, res)) return;
+  try {
+    const { id } = req.params;
+    const list = await dbGetAsync(`SELECT id FROM stock_lists WHERE id = ? AND company_id = ? AND deleted_at IS NOT NULL`, [id, req.user.company_id]);
+    if (!list) return res.status(404).json({ error: 'Lista não encontrada na lixeira' });
+    await dbRunAsync(`UPDATE stock_lists SET deleted_at = NULL, updated_at = ? WHERE id = ?`, [new Date().toISOString(), id]);
+    res.json({ message: 'Lista restaurada' });
+  } catch (e) {
+    console.error('Erro ao restaurar lista:', e);
+    res.status(500).json({ error: 'Erro ao restaurar lista' });
   }
 });
 
@@ -611,6 +643,42 @@ router.post('/lists/:id/copy', async (req, res) => {
   } catch (e) {
     console.error('Erro ao copiar lista:', e);
     res.status(500).json({ error: 'Erro ao copiar lista' });
+  }
+});
+
+// Copiar itens desta lista para outra lista existente
+router.post('/lists/:id/copy-items-to', async (req, res) => {
+  if (!guardCompany(req, res)) return;
+  try {
+    const { id } = req.params;
+    const { target_list_id } = req.body;
+    if (!target_list_id) return res.status(400).json({ error: 'Lista destino obrigatória' });
+    if (target_list_id === id) return res.status(400).json({ error: 'Origem e destino não podem ser a mesma lista' });
+
+    const source = await dbGetAsync(`SELECT * FROM stock_lists WHERE id = ? AND company_id = ? AND deleted_at IS NULL`, [id, req.user.company_id]);
+    if (!source) return res.status(404).json({ error: 'Lista origem não encontrada' });
+
+    const target = await dbGetAsync(`SELECT * FROM stock_lists WHERE id = ? AND company_id = ? AND deleted_at IS NULL`, [target_list_id, req.user.company_id]);
+    if (!target) return res.status(404).json({ error: 'Lista destino não encontrada' });
+
+    const items = await dbAllAsync(`SELECT * FROM stock_list_items WHERE list_id = ? ORDER BY order_index ASC`, [id]);
+    if (items.length === 0) return res.status(400).json({ error: 'Lista origem não tem itens para copiar' });
+
+    const maxOrder = await dbGetAsync(`SELECT MAX(order_index) as max_idx FROM stock_list_items WHERE list_id = ?`, [target_list_id]);
+    let nextIndex = ((maxOrder?.max_idx) ?? -1) + 1;
+    const now = new Date().toISOString();
+
+    for (const item of items) {
+      await dbRunAsync(
+        `INSERT INTO stock_list_items (id, list_id, product_id, name, unit, quantity, notes, flavor, order_index, created_at) VALUES (?, ?, ?, ?, ?, NULL, NULL, NULL, ?, ?)`,
+        [uuidv4(), target_list_id, item.product_id || null, item.name, item.unit || 'UN', nextIndex++, now]
+      );
+    }
+
+    res.json({ message: `${items.length} itens copiados para "${target.name}"`, items_copied: items.length, target_name: target.name });
+  } catch (e) {
+    console.error('Erro ao copiar itens:', e);
+    res.status(500).json({ error: 'Erro ao copiar itens' });
   }
 });
 

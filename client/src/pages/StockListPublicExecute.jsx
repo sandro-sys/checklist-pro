@@ -8,7 +8,7 @@ const TYPE_LABELS = { contagem: 'Contagem de Estoque', compras: 'Lista de Compra
 
 function ItemCard({ item, listId, onSave, onDuplicate, disabled }) {
   const [quantity, setQuantity] = useState(
-    item.quantity !== null && item.quantity !== undefined ? String(parseInt(item.quantity)) : ''
+    item.quantity !== null && item.quantity !== undefined ? String(parseFloat(item.quantity)) : ''
   )
   const [flavor, setFlavor] = useState(item.flavor || '')
   const [notes, setNotes] = useState(item.notes || '')
@@ -21,8 +21,8 @@ function ItemCard({ item, listId, onSave, onDuplicate, disabled }) {
 
   const save = async ({ quantityOverride } = {}) => {
     if (disabled) return
-    const qty = quantityOverride !== undefined ? quantityOverride : (quantity !== '' ? parseInt(quantity) : null)
-    const prevQty = lastQty.current !== null && lastQty.current !== undefined ? parseInt(lastQty.current) : null
+    const qty = quantityOverride !== undefined ? quantityOverride : (quantity !== '' ? parseFloat(String(quantity).replace(',', '.')) : null)
+    const prevQty = lastQty.current !== null && lastQty.current !== undefined ? parseFloat(lastQty.current) : null
     const changed = qty !== prevQty || flavor !== lastFlavor.current || notes !== lastNotes.current
     if (!changed) return
 
@@ -76,7 +76,7 @@ function ItemCard({ item, listId, onSave, onDuplicate, disabled }) {
           disabled={disabled}
           onMouseDown={e => e.preventDefault()}
           onClick={() => {
-            const v = Math.max(0, (parseInt(quantity) || 0) - 1)
+            const v = Math.max(0, (parseFloat(quantity) || 0) - 1)
             setQuantity(String(v))
             save({ quantityOverride: v })
           }}
@@ -87,8 +87,8 @@ function ItemCard({ item, listId, onSave, onDuplicate, disabled }) {
         <input
           type="number"
           min="0"
-          step="1"
-          inputMode="numeric"
+          step="any"
+          inputMode="decimal"
           value={quantity}
           onChange={e => setQuantity(e.target.value)}
           onBlur={() => save()}
@@ -105,7 +105,7 @@ function ItemCard({ item, listId, onSave, onDuplicate, disabled }) {
           disabled={disabled}
           onMouseDown={e => e.preventDefault()}
           onClick={() => {
-            const v = (parseInt(quantity) || 0) + 1
+            const v = (parseFloat(quantity) || 0) + 1
             setQuantity(String(v))
             save({ quantityOverride: v })
           }}
