@@ -562,6 +562,8 @@ export default function StockLists() {
     const ids = Array.isArray(l.assigned_to_ids) ? l.assigned_to_ids : []
     return ids.includes(user?.id) || l.assigned_to === user?.id
   })
+  const myPendingIds = new Set(myPendingLists.map(l => l.id))
+  const otherLists = lists.filter(l => !myPendingIds.has(l.id))
 
   const ListCard = ({ list, highlight }) => {
     const assignedNames = Array.isArray(list.assigned_to_names) ? list.assigned_to_names : []
@@ -674,11 +676,11 @@ export default function StockLists() {
             </div>
           )}
 
-          {lists.length > 0 && (
+          {otherLists.length > 0 && (
             <div>
               <h2 className="text-sm font-semibold text-dark-400 uppercase tracking-wider mb-3">Todas as Listas ({lists.length})</h2>
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                {lists.map(l => <ListCard key={l.id} list={l} />)}
+                {otherLists.map(l => <ListCard key={l.id} list={l} />)}
               </div>
             </div>
           )}
