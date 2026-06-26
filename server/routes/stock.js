@@ -1,6 +1,6 @@
 import express from 'express';
 import { v4 as uuidv4 } from 'uuid';
-import { dbRunAsync, dbGetAsync, dbAllAsync, withTransaction } from '../database/init.js';
+import { dbRunAsync, dbGetAsync, dbAllAsync, withTransaction, isProduction } from '../database/init.js';
 import { authenticateToken } from '../middleware/auth.js';
 
 const router = express.Router();
@@ -19,12 +19,13 @@ router.get('/public/:id', async (req, res) => {
     );
     if (!list) return res.status(404).json({ error: 'Lista não encontrada' });
 
+    const pubItemOrder = isProduction ? 'ORDER BY sli.name ASC' : 'ORDER BY sli.name COLLATE NOCASE ASC';
     const items = await dbAllAsync(
       `SELECT sli.*, p.has_flavor as product_has_flavor
        FROM stock_list_items sli
        LEFT JOIN products p ON sli.product_id = p.id
        WHERE sli.list_id = ?
-       ORDER BY sli.order_index ASC, sli.created_at ASC`,
+       ${pubItemOrder}`,
       [id]
     );
     res.json({ ...list, items });
@@ -145,13 +146,22 @@ router.delete('/products/:id', async (req, res) => {
   if (!guardCompany(req, res)) return;
   try {
     const { id } = req.params;
-    const product = await dbGetAsync(`SELECT id FROM products WHERE id = ? AND company_id = ?`, [id, req.user.company_id]);
+    const product = await dbGetAsync(`SELECT * FROM products WHERE id = ?`, [id]);
     if (!product) return res.status(404).json({ error: 'Produto não encontrado' });
-    await dbRunAsync(`UPDATE products SET is_active = 0, updated_at = ? WHERE id = ?`, [new Date().toISOString(), id]);
-    res.json({ message: 'Produto desativado' });
+    if (product.company_id !== req.user.company_id && !req.user.is_master)
+      return res.status(403).json({ error: 'Acesso negado' });
+    if (product.is_active)
+      return res.status(400).json({ error: 'Desative o produto antes de excluir' });
+
+    await dbRunAsync(`DELETE FROM products WHERE id = ?`, [id]);
+    await dbRunAsync(
+      `INSERT INTO audit_logs (id, user_id, action, entity_type, entity_id, details) VALUES (?, ?, 'DELETE', 'product', ?, ?)`,
+      [uuidv4(), req.user.id, id, JSON.stringify({ name: product.name })]
+    );
+    res.json({ message: 'Produto excluído permanentemente' });
   } catch (e) {
-    console.error('Erro ao desativar produto:', e);
-    res.status(500).json({ error: 'Erro ao desativar produto' });
+    console.error('Erro ao excluir produto:', e);
+    res.status(500).json({ error: 'Erro ao excluir produto' });
   }
 });
 
@@ -330,12 +340,13 @@ router.get('/lists/:id', async (req, res) => {
       assigned_to_names = list.assigned_to_name ? [list.assigned_to_name] : [];
     }
 
+    const authItemOrder = isProduction ? 'ORDER BY sli.name ASC' : 'ORDER BY sli.name COLLATE NOCASE ASC';
     const items = await dbAllAsync(
       `SELECT sli.*, p.current_stock as product_current_stock, p.min_stock as product_min_stock, p.has_flavor as product_has_flavor
        FROM stock_list_items sli
        LEFT JOIN products p ON sli.product_id = p.id
        WHERE sli.list_id = ?
-       ORDER BY sli.order_index ASC, sli.created_at ASC`,
+       ${authItemOrder}`,
       [id]
     );
     res.json({ ...list, assigned_to_ids, assigned_to_names, items });
@@ -352,6 +363,13 @@ router.put('/lists/:id', async (req, res) => {
     const { name, notes, assigned_to_ids } = req.body;
     const list = await dbGetAsync(`SELECT * FROM stock_lists WHERE id = ? AND company_id = ?`, [id, req.user.company_id]);
     if (!list) return res.status(404).json({ error: 'Lista não encontrada' });
+
+    const assignedIds = list.assigned_to_ids ? JSON.parse(list.assigned_to_ids) : [];
+    const isSingleAssigned = list.assigned_to && list.assigned_to === req.user.id;
+    const isMultiAssigned  = assignedIds.includes(req.user.id);
+    const canEdit = req.user.is_master || isSingleAssigned || isMultiAssigned ||
+                    (!list.assigned_to && assignedIds.length === 0);
+    if (!canEdit) return res.status(403).json({ error: 'Você não tem permissão para editar esta lista' });
 
     let newIds, newIdsJson, primaryId;
     if (assigned_to_ids !== undefined) {
@@ -391,6 +409,14 @@ router.post('/lists/:id/items', async (req, res) => {
 
     const list = await dbGetAsync(`SELECT * FROM stock_lists WHERE id = ? AND company_id = ?`, [id, req.user.company_id]);
     if (!list) return res.status(404).json({ error: 'Lista não encontrada' });
+
+    const assignedIdsPost = list.assigned_to_ids ? JSON.parse(list.assigned_to_ids) : [];
+    const isSingleAssignedPost = list.assigned_to && list.assigned_to === req.user.id;
+    const isMultiAssignedPost  = assignedIdsPost.includes(req.user.id);
+    const canEditPost = req.user.is_master || isSingleAssignedPost || isMultiAssignedPost ||
+                        (!list.assigned_to && assignedIdsPost.length === 0);
+    if (!canEditPost) return res.status(403).json({ error: 'Você não tem permissão para editar esta lista' });
+
     if (!name) return res.status(400).json({ error: 'Nome do item é obrigatório' });
 
     const maxOrder = await dbGetAsync(`SELECT MAX(order_index) as max_idx FROM stock_list_items WHERE list_id = ?`, [id]);
@@ -402,7 +428,13 @@ router.post('/lists/:id/items', async (req, res) => {
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [itemId, id, product_id || null, name.toUpperCase().trim(), unit ? unit.toUpperCase().trim() : null, quantity !== undefined ? parseFloat(quantity) : null, notes || null, flavor || null, nextIndex]
     );
-    res.status(201).json({ message: 'Item adicionado', item: await dbGetAsync(`SELECT * FROM stock_list_items WHERE id = ?`, [itemId]) });
+
+    const postItemOrder = isProduction ? 'ORDER BY name ASC' : 'ORDER BY name COLLATE NOCASE ASC';
+    const items = await dbAllAsync(
+      `SELECT * FROM stock_list_items WHERE list_id = ? ${postItemOrder}`,
+      [id]
+    );
+    res.status(201).json({ message: 'Item adicionado', items });
   } catch (e) {
     console.error('Erro ao adicionar item:', e);
     res.status(500).json({ error: 'Erro ao adicionar item' });
@@ -415,8 +447,15 @@ router.put('/lists/:id/items/:itemId', async (req, res) => {
     const { id, itemId } = req.params;
     const { name, unit, quantity, notes, flavor } = req.body;
 
-    const list = await dbGetAsync(`SELECT status FROM stock_lists WHERE id = ? AND company_id = ?`, [id, req.user.company_id]);
+    const list = await dbGetAsync(`SELECT * FROM stock_lists WHERE id = ? AND company_id = ?`, [id, req.user.company_id]);
     if (!list) return res.status(404).json({ error: 'Lista não encontrada' });
+
+    const assignedIdsPut = list.assigned_to_ids ? JSON.parse(list.assigned_to_ids) : [];
+    const isSingleAssignedPut = list.assigned_to && list.assigned_to === req.user.id;
+    const isMultiAssignedPut  = assignedIdsPut.includes(req.user.id);
+    const canEditPut = req.user.is_master || isSingleAssignedPut || isMultiAssignedPut ||
+                       (!list.assigned_to && assignedIdsPut.length === 0);
+    if (!canEditPut) return res.status(403).json({ error: 'Você não tem permissão para editar esta lista' });
 
     const item = await dbGetAsync(`SELECT * FROM stock_list_items WHERE id = ? AND list_id = ?`, [itemId, id]);
     if (!item) return res.status(404).json({ error: 'Item não encontrado' });
@@ -443,8 +482,16 @@ router.delete('/lists/:id/items/:itemId', async (req, res) => {
   if (!guardCompany(req, res)) return;
   try {
     const { id, itemId } = req.params;
-    const list = await dbGetAsync(`SELECT status FROM stock_lists WHERE id = ? AND company_id = ?`, [id, req.user.company_id]);
+    const list = await dbGetAsync(`SELECT * FROM stock_lists WHERE id = ? AND company_id = ?`, [id, req.user.company_id]);
     if (!list) return res.status(404).json({ error: 'Lista não encontrada' });
+
+    const assignedIdsDel = list.assigned_to_ids ? JSON.parse(list.assigned_to_ids) : [];
+    const isSingleAssignedDel = list.assigned_to && list.assigned_to === req.user.id;
+    const isMultiAssignedDel  = assignedIdsDel.includes(req.user.id);
+    const canEditDel = req.user.is_master || isSingleAssignedDel || isMultiAssignedDel ||
+                       (!list.assigned_to && assignedIdsDel.length === 0);
+    if (!canEditDel) return res.status(403).json({ error: 'Você não tem permissão para editar esta lista' });
+
     await dbRunAsync(`DELETE FROM stock_list_items WHERE id = ? AND list_id = ?`, [itemId, id]);
     res.json({ message: 'Item removido' });
   } catch (e) {
@@ -492,6 +539,13 @@ router.post('/lists/:id/finalize', async (req, res) => {
     const list = await dbGetAsync(`SELECT * FROM stock_lists WHERE id = ? AND company_id = ?`, [id, req.user.company_id]);
     if (!list) return res.status(404).json({ error: 'Lista não encontrada' });
     if (list.status === 'finalizada') return res.status(400).json({ error: 'Lista já finalizada' });
+
+    const assignedIdsFin = list.assigned_to_ids ? JSON.parse(list.assigned_to_ids) : [];
+    const isSingleAssignedFin = list.assigned_to && list.assigned_to === req.user.id;
+    const isMultiAssignedFin  = assignedIdsFin.includes(req.user.id);
+    const canEditFin = req.user.is_master || isSingleAssignedFin || isMultiAssignedFin ||
+                       (!list.assigned_to && assignedIdsFin.length === 0);
+    if (!canEditFin) return res.status(403).json({ error: 'Você não tem permissão para editar esta lista' });
 
     const items = await dbAllAsync(`SELECT * FROM stock_list_items WHERE list_id = ? ORDER BY order_index`, [id]);
     if (items.length === 0) return res.status(400).json({ error: 'Lista vazia — adicione itens antes de finalizar' });
@@ -561,8 +615,8 @@ router.get('/lists/:id/export-txt', async (req, res) => {
     );
 
     const typeLabel = { contagem: 'CONTAGEM DE ESTOQUE', compras: 'LISTA DE COMPRAS', inventario: 'INVENTARIO' }[list.type] || list.type.toUpperCase();
-    const dt = new Date(list.finalized_at || list.created_at);
-    const dateStr = dt.toLocaleDateString('pt-BR') + ' ' + dt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    const dt = new Date();
+    const dateStr = dt.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }).replace(',', '');
     const sep = '='.repeat(62);
     const div = '-'.repeat(62);
     const pad  = (s, n) => String(s || '').slice(0, n).padEnd(n);
@@ -577,7 +631,7 @@ router.get('/lists/:id/export-txt', async (req, res) => {
     txt += `TIPO    : ${typeLabel}\n`;
     txt += `STATUS  : ${list.status === 'finalizada' ? 'FINALIZADA' : 'EM EDICAO'}\n`;
     txt += `DATA    : ${dateStr}\n`;
-    txt += `RESP.   : ${(list.created_by_name || '').toUpperCase()}\n`;
+    txt += `RESP.   : ${(req.user.name || '').toUpperCase()}\n`;
     if (list.notes) txt += `OBS     : ${list.notes.toUpperCase()}\n`;
     txt += sep + '\n\n';
     txt += pad('PRODUTO', 26) + padL('QTDE', 8) + padL('UNID', 6) + '  OBSERVACAO\n';

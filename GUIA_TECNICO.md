@@ -36,6 +36,7 @@
 | B7 | Refresh token sem rotação | 🟡 Médio | ✅ Corrigido |
 | UX1 | Senha temporária retornada em texto na API | 🟠 Baixo | ⬜ Pendente |
 | UX2 | Sem paginação em listagens | 🟠 Baixo | ⬜ Pendente |
+| B8 | data de criação e nome do criador no export-txt | 🟠 Baixo | ✅ Corrigido |
 | F1 | Módulo de Controle de Estoque | 🟢 Feature | ⬜ Pendente |
 
 ---

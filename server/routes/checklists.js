@@ -255,8 +255,13 @@ router.get('/company/:companyId', authenticateToken, async (req, res) => {
     const { companyId } = req.params;
     const { category_id, is_active } = req.query;
 
+    // [P6] Verificar que o usuário pertence à empresa solicitada
+    if (companyId !== req.user.company_id && !req.user.is_master) {
+      return res.status(403).json({ error: 'Acesso negado' });
+    }
+
     let query = `
-      SELECT c.*, 
+      SELECT c.*,
              cat.name as category_name,
              cat.icon as category_icon,
              u.name as created_by_name,
@@ -267,7 +272,7 @@ router.get('/company/:companyId', authenticateToken, async (req, res) => {
       LEFT JOIN users u ON c.created_by = u.id
       WHERE c.company_id = ?
     `;
-    
+
     const params = [companyId];
 
     if (category_id) {
@@ -280,10 +285,38 @@ router.get('/company/:companyId', authenticateToken, async (req, res) => {
       params.push(is_active === 'true' ? 1 : 0);
     }
 
-    query += ' ORDER BY c.created_at DESC';
+    // [UX2] Paginação: ?page=1&limit=50 (máximo 200)
+    const page   = Math.max(1, parseInt(req.query.page)  || 1);
+    const limit  = Math.min(200, Math.max(1, parseInt(req.query.limit) || 50));
+    const offset = (page - 1) * limit;
 
-    const checklists = await dbAllAsync(query, params);
-    res.json(checklists);
+    let countQuery = `SELECT COUNT(*) as total FROM checklists c WHERE c.company_id = ?`;
+    const countParams = [companyId];
+
+    if (category_id) {
+      countQuery += ' AND c.category_id = ?';
+      countParams.push(category_id);
+    }
+    if (is_active !== undefined) {
+      countQuery += ' AND c.is_active = ?';
+      countParams.push(is_active === 'true' ? 1 : 0);
+    }
+
+    query += ' ORDER BY c.created_at DESC LIMIT ? OFFSET ?';
+    params.push(limit, offset);
+
+    const [{ total }] = await dbAllAsync(countQuery, countParams);
+    const checklists  = await dbAllAsync(query, params);
+
+    res.json({
+      data: checklists,
+      pagination: {
+        page,
+        limit,
+        total: parseInt(total) || 0,
+        pages: Math.ceil((parseInt(total) || 0) / limit)
+      }
+    });
   } catch (error) {
     console.error('Erro ao listar checklists:', error);
     res.status(500).json({ error: 'Erro ao listar checklists' });

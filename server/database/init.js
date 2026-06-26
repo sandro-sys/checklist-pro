@@ -786,8 +786,7 @@ export function saveDatabase() {
 // Helper functions que funcionam tanto com SQLite quanto PostgreSQL
 export async function dbRunAsync(sql, params = []) {
   if (isProduction) {
-    // PostgreSQL usa $1, $2, etc. em vez de ?
-    const pgSql = sql.replace(/\?/g, (_, i) => `$${params.indexOf(_) + 1}`);
+    // [P1] Converte placeholders ? para $1,$2,... do PostgreSQL
     let paramIndex = 0;
     const finalSql = sql.replace(/\?/g, () => `$${++paramIndex}`);
     await pgPool.query(finalSql, params);

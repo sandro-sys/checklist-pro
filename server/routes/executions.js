@@ -39,9 +39,9 @@ router.post('/start', authenticateToken, async (req, res) => {
     const executionId = uuidv4();
 
     await dbRunAsync(`
-      INSERT INTO checklist_executions (id, checklist_id, executed_by, status)
-      VALUES (?, ?, ?, 'in_progress')
-    `, [executionId, checklist_id, req.user.id]);
+      INSERT INTO checklist_executions (id, checklist_id, executed_by, executed_at, status)
+      VALUES (?, ?, ?, ?, 'in_progress')
+    `, [executionId, checklist_id, req.user.id, new Date().toISOString()]);
 
     // Log de auditoria
     await dbRunAsync(`

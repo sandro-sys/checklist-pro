@@ -11,21 +11,40 @@ const router = express.Router();
 router.get('/', authenticateToken, async (req, res) => {
   try {
     const companyId = req.user.company_id;
-    
+
     if (!companyId) {
       return res.status(400).json({ error: 'Usuário não vinculado a uma empresa' });
     }
 
+    // [UX2] Paginação: ?page=1&limit=50 (máximo 200)
+    const page   = Math.max(1, parseInt(req.query.page)  || 1);
+    const limit  = Math.min(200, Math.max(1, parseInt(req.query.limit) || 50));
+    const offset = (page - 1) * limit;
+
+    const [{ total }] = await dbAllAsync(
+      `SELECT COUNT(*) as total FROM users u WHERE u.company_id = ?`,
+      [companyId]
+    );
     const users = await dbAllAsync(`
-      SELECT u.id, u.email, u.name, u.phone, u.role_type, u.role_id, u.is_active, u.last_login, u.created_at,
+      SELECT u.id, u.email, u.name, u.phone, u.role_type, u.role_id,
+             u.is_active, u.last_login, u.created_at,
              r.name as role_name
       FROM users u
       LEFT JOIN roles r ON u.role_id = r.id
       WHERE u.company_id = ?
       ORDER BY u.name
-    `, [companyId]);
+      LIMIT ? OFFSET ?
+    `, [companyId, limit, offset]);
 
-    res.json(users);
+    res.json({
+      data: users,
+      pagination: {
+        page,
+        limit,
+        total: parseInt(total) || 0,
+        pages: Math.ceil((parseInt(total) || 0) / limit)
+      }
+    });
   } catch (error) {
     console.error('Erro ao listar usuários:', error);
     res.status(500).json({ error: 'Erro ao listar usuários' });
