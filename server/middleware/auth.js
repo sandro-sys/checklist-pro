@@ -32,6 +32,7 @@ export function authenticateToken(req, res, next) {
       req.user = {
         ...decoded,
         company_id: user.company_id || user.owner_company_id,
+        owner_company_id: user.owner_company_id,
         is_master: user.is_master === 1
       };
       

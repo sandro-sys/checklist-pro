@@ -256,7 +256,8 @@ router.get('/company/:companyId', authenticateToken, async (req, res) => {
     const { category_id, is_active } = req.query;
 
     // [P6] Verificar que o usuário pertence à empresa solicitada
-    if (companyId !== req.user.company_id && !req.user.is_master) {
+    const userCompanyId = req.user.company_id || req.user.owner_company_id;
+    if (userCompanyId !== companyId && !req.user.is_master) {
       return res.status(403).json({ error: 'Acesso negado' });
     }
 
