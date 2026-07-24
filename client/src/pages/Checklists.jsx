@@ -44,7 +44,10 @@ export default function Checklists() {
         api.get(`/checklists/company/${company.id}`),
         api.get(`/companies/${company.id}/categories`)
       ])
-      setChecklists(checklistsRes.data)
+      const list = Array.isArray(checklistsRes.data)
+        ? checklistsRes.data
+        : checklistsRes.data?.data ?? []
+      setChecklists(list)
       setCategories(categoriesRes.data)
     } catch (error) {
       toast.error('Erro ao carregar checklists')

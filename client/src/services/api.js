@@ -50,7 +50,7 @@ api.interceptors.response.use(
       return Promise.reject(error)
     }
 
-    if (error.response?.status === 403 && !originalRequest._retry) {
+    if ((error.response?.status === 401 || error.response?.status === 403) && !originalRequest._retry) {
       if (isRefreshing) {
         // Se já está fazendo refresh, adiciona na fila
         return new Promise((resolve, reject) => {
@@ -76,7 +76,10 @@ api.interceptors.response.use(
         return api(originalRequest)
       } catch (refreshError) {
         processQueue(refreshError, null)
-        // Não faz redirect aqui - deixa o authStore cuidar disso
+        // Redirecionar para login quando refresh falhar
+        if (typeof window !== 'undefined') {
+          window.location.href = '/login'
+        }
         return Promise.reject(refreshError)
       } finally {
         isRefreshing = false

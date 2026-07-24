@@ -50,7 +50,10 @@ export default function Dashboard() {
 
       // Fetch recent checklists
       const checklistsRes = await api.get(`/checklists/company/${companyRes.data.id}?is_active=true`)
-      setChecklists(checklistsRes.data.slice(0, 5))
+      const list = Array.isArray(checklistsRes.data)
+        ? checklistsRes.data
+        : checklistsRes.data?.data ?? []
+      setChecklists(list.slice(0, 5))
 
       // Fetch stock counting sessions
       try {
