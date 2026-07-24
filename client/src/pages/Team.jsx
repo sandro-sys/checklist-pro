@@ -65,7 +65,10 @@ export default function Team() {
         api.get('/users'),
         api.get('/roles')
       ])
-      setUsers(usersRes.data || [])
+      const userList = Array.isArray(usersRes.data)
+        ? usersRes.data
+        : usersRes.data?.data ?? []
+      setUsers(userList)
       setRoles(rolesRes.data || [])
     } catch (error) {
       if (error.response?.status === 400) {
