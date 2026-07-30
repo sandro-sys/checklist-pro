@@ -184,7 +184,8 @@ router.put('/:id/password', authenticateToken, async (req, res) => {
     const { current_password, new_password } = req.body;
 
     // Só pode alterar a própria senha ou se for owner/admin
-    if (id !== req.user.id && req.user.role_type !== 'owner' && req.user.role_type !== 'admin') {
+    // (req.user.role vem do middleware de auth — role_type não existe em req.user)
+    if (id !== req.user.id && req.user.role !== 'owner' && req.user.role !== 'admin') {
       return res.status(403).json({ error: 'Acesso negado' });
     }
 

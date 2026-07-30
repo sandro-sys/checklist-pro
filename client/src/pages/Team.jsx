@@ -19,7 +19,8 @@ import {
   Eye,
   EyeOff,
   Building2,
-  ArrowRight
+  ArrowRight,
+  KeyRound
 } from 'lucide-react'
 import api from '../services/api'
 import { useAuthStore } from '../store/authStore'
@@ -38,6 +39,7 @@ export default function Team() {
   const [editingUser, setEditingUser] = useState(null)
   const [editingRole, setEditingRole] = useState(null)
   const [activeMenu, setActiveMenu] = useState(null)
+  const [resetPasswordUser, setResetPasswordUser] = useState(null)
 
   useEffect(() => {
     fetchData()
@@ -351,6 +353,18 @@ export default function Team() {
                                   </>
                                 )}
                               </button>
+                              {(user?.role === 'owner' || user?.role === 'admin') && (
+                                <button
+                                  onClick={() => {
+                                    setResetPasswordUser(member)
+                                    setActiveMenu(null)
+                                  }}
+                                  className="flex items-center gap-2 w-full px-4 py-2 text-dark-300 hover:text-white hover:bg-dark-700/50"
+                                >
+                                  <KeyRound className="w-4 h-4" />
+                                  Redefinir senha
+                                </button>
+                              )}
                               <hr className="my-2 border-dark-700" />
                               <button
                                 onClick={() => handleDeleteUser(member.id)}
@@ -466,6 +480,14 @@ export default function Team() {
           setShowRoleModal(false)
           setEditingRole(null)
         }}
+      />
+
+      {/* Reset Password Modal */}
+      <ResetPasswordModal
+        isOpen={!!resetPasswordUser}
+        onClose={() => setResetPasswordUser(null)}
+        targetUser={resetPasswordUser}
+        onSuccess={() => setResetPasswordUser(null)}
       />
 
       {/* Click outside to close menu */}
@@ -674,6 +696,143 @@ function UserModal({ isOpen, onClose, user, roles, onSuccess }) {
                 <>
                   <Check className="w-5 h-5" />
                   {user ? 'Salvar' : 'Criar'}
+                </>
+              )}
+            </button>
+          </div>
+        </form>
+      </motion.div>
+    </motion.div>
+  )
+}
+
+// Reset Password Modal Component
+function ResetPasswordModal({ isOpen, onClose, targetUser, onSuccess }) {
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
+
+  useEffect(() => {
+    setNewPassword('')
+    setConfirmPassword('')
+    setShowPassword(false)
+  }, [targetUser, isOpen])
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+
+    if (newPassword.length < 8) {
+      toast.error('Nova senha deve ter no mínimo 8 caracteres')
+      return
+    }
+    if (newPassword !== confirmPassword) {
+      toast.error('As senhas não coincidem')
+      return
+    }
+
+    setIsLoading(true)
+    try {
+      await api.put(`/users/${targetUser.id}/password`, { new_password: newPassword })
+      toast.success(`Senha de ${targetUser.name} redefinida!`)
+      onSuccess()
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'Erro ao redefinir senha')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  if (!isOpen) return null
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      onClick={onClose}
+      className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+    >
+      <motion.div
+        initial={{ scale: 0.9, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        exit={{ scale: 0.9, opacity: 0 }}
+        onClick={(e) => e.stopPropagation()}
+        className="bg-dark-800 border border-dark-700 rounded-2xl p-6 max-w-md w-full"
+      >
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-xl font-bold text-white">Redefinir senha</h2>
+          <button
+            onClick={onClose}
+            className="p-2 text-dark-400 hover:text-white rounded-lg hover:bg-dark-700"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <p className="text-sm text-dark-400 mb-4">
+          Nova senha para <span className="text-white font-medium">{targetUser?.name}</span> — ela não precisa informar a senha atual.
+        </p>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-dark-300 mb-2">
+              Nova senha *
+            </label>
+            <div className="relative">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                placeholder="Mínimo 8 caracteres"
+                required
+                minLength={8}
+                className="w-full px-4 py-3 pr-12 bg-dark-700/50 border border-dark-600 rounded-xl text-white placeholder-dark-500 focus:border-primary-500 focus:ring-1 focus:ring-primary-500 transition-all"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-dark-500 hover:text-dark-300"
+              >
+                {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-dark-300 mb-2">
+              Confirmar nova senha *
+            </label>
+            <input
+              type={showPassword ? 'text' : 'password'}
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              placeholder="Repita a senha"
+              required
+              minLength={8}
+              className="w-full px-4 py-3 bg-dark-700/50 border border-dark-600 rounded-xl text-white placeholder-dark-500 focus:border-primary-500 focus:ring-1 focus:ring-primary-500 transition-all"
+            />
+          </div>
+
+          <div className="flex gap-3 pt-4">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 py-3 bg-dark-700 hover:bg-dark-600 text-white rounded-xl transition-colors"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="flex-1 py-3 bg-gradient-to-r from-primary-500 to-accent-teal text-white font-semibold rounded-xl hover:shadow-lg hover:shadow-primary-500/25 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+              {isLoading ? (
+                <Loader2 className="w-5 h-5 animate-spin" />
+              ) : (
+                <>
+                  <Check className="w-5 h-5" />
+                  Redefinir
                 </>
               )}
             </button>
