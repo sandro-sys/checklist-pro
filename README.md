@@ -1,5 +1,8 @@
 # ✅ CheckList Pro
 
+Sistema de gestão de checklists operacionais para negócios. Ideal para restaurantes, lojas, escritórios e qualquer estabelecimento que precise padronizar e acompanhar processos.
+
+
 ## Stack
 
 **Frontend:** React · Vite  
@@ -8,10 +11,6 @@
 **Autenticação:** JWT com refresh token  
 **Integrações:** Mercado Pago (pagamentos) · Resend (e-mail)  
 **Deploy:** Render
-
-
-Sistema de gestão de checklists operacionais para negócios. Ideal para restaurantes, lojas, escritórios e qualquer estabelecimento que precise padronizar e acompanhar processos.
-
 ![CheckList Pro](https://via.placeholder.com/800x400/1e293b/22c55e?text=CheckList+Pro)
 
 ## 🚀 Funcionalidades
